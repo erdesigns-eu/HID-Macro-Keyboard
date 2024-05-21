@@ -15,7 +15,7 @@ interface
 uses
   System.SysUtils, System.Classes, Winapi.Windows, Vcl.Controls, Vcl.Graphics,
   Winapi.Messages, System.Types, Vcl.Menus, Vcl.ExtCtrls, Vcl.Themes, Vcl.Forms,
-  Winapi.GDIPAPI, Winapi.GDIPOBJ;
+  Winapi.GDIPAPI, Winapi.GDIPOBJ, HID.MacroKeyboard.Config;
 
 const
   /// <summary>
@@ -1307,7 +1307,7 @@ end;
 //------------------------------------------------------------------------------
 procedure Register;
 begin
-  RegisterComponents('ERDesigns', [TMacroKeyboard]);
+  RegisterComponents('ERDesigns', [TMacroKeyboard, TMacroKeyboardConfig]);
 end;
 
 end.

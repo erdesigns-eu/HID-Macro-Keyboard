@@ -29,9 +29,11 @@
 
 requires
   rtl,
-  vcl;
+  vcl,
+  RESTComponents;
 
 contains
-  HID.MacroKeyboard.Component in 'Units\HID.MacroKeyboard.Component.pas';
+  HID.MacroKeyboard.Component in 'Units\HID.MacroKeyboard.Component.pas',
+  HID.MacroKeyboard.Config in 'Units\HID.MacroKeyboard.Config.pas';
 
 end.

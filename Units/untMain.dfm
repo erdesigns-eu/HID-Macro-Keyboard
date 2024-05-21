@@ -11,6 +11,7 @@ object frmMain: TfrmMain
   Font.Name = 'Segoe UI'
   Font.Style = []
   Menu = MainMenu
+  OnCloseQuery = FormCloseQuery
   OnCreate = FormCreate
   TextHeight = 15
   object MacroKeyboard: TMacroKeyboard
@@ -31,7 +32,10 @@ object frmMain: TfrmMain
     Top = 423
     Width = 628
     Height = 19
-    Panels = <>
+    Panels = <
+      item
+        Width = 50
+      end>
     ExplicitTop = 422
     ExplicitWidth = 624
   end
@@ -41,6 +45,7 @@ object frmMain: TfrmMain
     object acNew: TAction
       Category = 'File'
       Caption = '&New..'
+      OnExecute = acNewExecute
     end
     object acOpen: TFileOpen
       Category = 'File'
@@ -48,20 +53,25 @@ object frmMain: TfrmMain
       Dialog.DefaultExt = '*.mkc'
       Dialog.Filter = 'Macro Keyboard Config|*.mkc'
       ShortCut = 16463
+      BeforeExecute = acOpenBeforeExecute
+      OnAccept = acOpenAccept
     end
     object acSave: TAction
       Category = 'File'
       Caption = 'Save..'
+      OnExecute = acSaveExecute
     end
     object acSaveAs: TFileSaveAs
       Category = 'File'
       Caption = 'Save &As...'
       Dialog.DefaultExt = '*.mkc'
       Dialog.Filter = 'Macro Keyboard Config|*.mkc'
+      OnAccept = acSaveAsAccept
     end
     object acExit: TAction
       Category = 'File'
       Caption = 'Exit..'
+      OnExecute = acExitExecute
     end
     object acSetMacroKey: TAction
       Category = 'Key'
@@ -213,5 +223,11 @@ object frmMain: TfrmMain
     object Clear4: TMenuItem
       Action = acClearKnob
     end
+  end
+  object MacroKeyboardConfig: TMacroKeyboardConfig
+    Modified = False
+    OnFilename = MacroKeyboardConfigFilename
+    Left = 464
+    Top = 8
   end
 end

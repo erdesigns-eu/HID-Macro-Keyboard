@@ -6,7 +6,7 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, HID.MacroKeyboard.Component,
   Vcl.ExtCtrls, Vcl.ComCtrls, Vcl.StdCtrls, Vcl.Menus, Vcl.StdActns,
-  System.Actions, Vcl.ActnList;
+  System.Actions, Vcl.ActnList, HID.MacroKeyboard.Config;
 
 type
   TfrmMain = class(TForm)
@@ -62,10 +62,19 @@ type
     SetClickMacro2: TMenuItem;
     N9: TMenuItem;
     Clear4: TMenuItem;
+    MacroKeyboardConfig: TMacroKeyboardConfig;
     procedure MacroKeyboardSelect(Sender: TObject; Index: Integer);
     procedure RepaintTimerTimer(Sender: TObject);
     procedure FormCreate(Sender: TObject);
     procedure acAboutExecute(Sender: TObject);
+    procedure acNewExecute(Sender: TObject);
+    procedure acOpenAccept(Sender: TObject);
+    procedure acOpenBeforeExecute(Sender: TObject);
+    procedure acSaveExecute(Sender: TObject);
+    procedure acSaveAsAccept(Sender: TObject);
+    procedure acExitExecute(Sender: TObject);
+    procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
+    procedure MacroKeyboardConfigFilename(Sender: TObject; Filename: string);
   private
     /// <summary>
     ///   "Old" window state used in WndProc
@@ -87,7 +96,11 @@ implementation
 
 {$R *.dfm}
 
-const ApplicationTitle = 'Macro Keyboard';
+const
+  ApplicationTitle = 'Macro Keyboard';
+
+const
+  ConfirmSaveMessage: string = 'You have unsafed changes, do you want to save them first?';
 
 //------------------------------------------------------------------------------
 // WNDPROC HANDLER
@@ -155,6 +168,152 @@ const
   AboutText: string = 'Macro Keyboard Utility by ERDesigns.' + sLineBreak + sLineBreak + 'Made by Ernst Reidinga.' + sLineBreak + 'V1.0 (20/05/2024)';
 begin
   TaskMessageDlg(ApplicationTitle, AboutText, mtCustom, [mbOK], 0, mbOK);
+end;
+
+//------------------------------------------------------------------------------
+// NEW CONFIG
+//------------------------------------------------------------------------------
+procedure TfrmMain.acNewExecute(Sender: TObject);
+begin
+  if MacroKeyboardConfig.Modified then
+  begin
+    case Application.MessageBox(PChar(ConfirmSaveMessage), PChar(ApplicationTitle), MB_ICONQUESTION + MB_YESNOCANCEL) of
+      ID_YES:
+      begin
+        // if the file exists, save it
+        if FileExists(MacroKeyboardConfig.FileName) then
+          MacroKeyboardConfig.SaveToFile(MacroKeyboardConfig.FileName)
+        else
+          // Otherwise execute the save as dialog
+          if not acSaveAs.Execute then Exit;
+      end;
+
+      ID_NO:
+      begin
+        // No need to save changes, do nothing here
+      end;
+
+      ID_CANCEL:
+      begin
+        // Exit here, dont create a new configuration
+        Exit;
+      end;
+    end;
+  end;
+
+  // New configuration
+  MacroKeyboardConfig.New;
+  // Clear selected key/knob
+  MacroKeyboard.SelectedIndex := -1;
+end;
+
+//------------------------------------------------------------------------------
+// BEFORE OPEN
+//------------------------------------------------------------------------------
+procedure TfrmMain.acOpenBeforeExecute(Sender: TObject);
+begin
+  if MacroKeyboardConfig.Modified then
+  case Application.MessageBox(PChar(ConfirmSaveMessage), PChar(ApplicationTitle), MB_ICONQUESTION + MB_YESNOCANCEL) of
+    ID_YES:
+    begin
+      // if the file exists, save it
+      if FileExists(MacroKeyboardConfig.FileName) then
+        MacroKeyboardConfig.SaveToFile(MacroKeyboardConfig.FileName)
+      else
+        // Otherwise execute the save as dialog
+        if not acSaveAs.Execute then Exit;
+    end;
+
+    ID_NO:
+    begin
+      // No need to save changes, do nothing here
+    end;
+
+    ID_CANCEL:
+    begin
+      // Exit here, dont create a new configuration
+      Exit;
+    end;
+  end;
+end;
+
+//------------------------------------------------------------------------------
+// OPEN ACCEPT
+//------------------------------------------------------------------------------
+procedure TfrmMain.acOpenAccept(Sender: TObject);
+begin
+  // Open the configuration from the file
+  MacroKeyboardConfig.LoadFromFile(acOpen.Dialog.FileName);
+end;
+
+//------------------------------------------------------------------------------
+// SAVE
+//------------------------------------------------------------------------------
+procedure TfrmMain.acSaveExecute(Sender: TObject);
+begin
+  // if the file exists, save it
+  if FileExists(MacroKeyboardConfig.FileName) then
+    MacroKeyboardConfig.SaveToFile(MacroKeyboardConfig.FileName)
+  else
+    // Otherwise execute the save as dialog
+    acSaveAs.Execute;
+end;
+
+//------------------------------------------------------------------------------
+// SAVE AS
+//------------------------------------------------------------------------------
+procedure TfrmMain.acSaveAsAccept(Sender: TObject);
+begin
+  MacroKeyboardConfig.SaveToFile(acSaveAs.Dialog.FileName);
+end;
+
+//------------------------------------------------------------------------------
+// EXIT
+//------------------------------------------------------------------------------
+procedure TfrmMain.acExitExecute(Sender: TObject);
+begin
+  Close;
+end;
+
+//------------------------------------------------------------------------------
+// FORM CLOSE QUERY
+//------------------------------------------------------------------------------
+procedure TfrmMain.FormCloseQuery(Sender: TObject; var CanClose: Boolean);
+begin
+  if MacroKeyboardConfig.Modified then
+  case Application.MessageBox(PChar(ConfirmSaveMessage), PChar(ApplicationTitle), MB_ICONQUESTION + MB_YESNOCANCEL) of
+    ID_YES:
+    begin
+      // if the file exists, save it
+      if FileExists(MacroKeyboardConfig.FileName) then
+        MacroKeyboardConfig.SaveToFile(MacroKeyboardConfig.FileName)
+      else
+        // Otherwise execute the save as dialog
+        if not acSaveAs.Execute then Exit;
+    end;
+
+    ID_NO:
+    begin
+      // No need to save changes, do nothing here
+    end;
+
+    ID_CANCEL:
+    begin
+      // Dont close the form
+      CanClose := False;
+    end;
+  end;
+
+  // If we make it until here we can close the form.
+  CanClose := True;
+end;
+
+//------------------------------------------------------------------------------
+// CONFIGURATION FILENAME CHANGED
+//------------------------------------------------------------------------------
+procedure TfrmMain.MacroKeyboardConfigFilename(Sender: TObject; Filename: string);
+begin
+  StatusBar.Panels[0].Text := Filename;
 end;
 
 end.

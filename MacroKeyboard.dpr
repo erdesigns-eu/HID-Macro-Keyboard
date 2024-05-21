@@ -9,7 +9,8 @@ uses
   HID.MacroKeyboard in 'Units\HID.MacroKeyboard.pas',
   HID.MacroKeyboard.Component in 'Units\HID.MacroKeyboard.Component.pas',
   Vcl.Themes,
-  Vcl.Styles;
+  Vcl.Styles,
+  HID.MacroKeyboard.Config in 'Units\HID.MacroKeyboard.Config.pas';
 
 {$R *.res}
 
