@@ -39,6 +39,14 @@ type
     /// </summary>
     FWin: Boolean;
     /// <summary>
+    ///   Mouse
+    /// </summary>
+    FMouse: string;
+    /// <summary>
+    ///   Media
+    /// </summary>
+    FMedia: string;
+    /// <summary>
     ///   Key 1
     /// </summary>
     FKey1: string;
@@ -79,6 +87,14 @@ type
     ///   Set Win Modifier
     /// </summary>
     procedure SetWin(const Win: Boolean);
+    /// <summary>
+    ///   Set Mouse
+    /// </summary>
+    procedure SetMouse(const Mouse: string);
+    /// <summary>
+    ///   Set Media
+    /// </summary>
+    procedure SetMedia(const Media: string);
     /// <summary>
     ///   Set Key 1
     /// </summary>
@@ -139,6 +155,14 @@ type
     ///   Win Modifier
     /// </summary>
     property Win: Boolean read FWin write SetWin;
+    /// <summary>
+    ///   Mouse
+    /// </summary>
+    property Mouse: string read FMouse write SetMouse;
+    /// <summary>
+    ///   Media
+    /// </summary>
+    property Media: string read FMedia write SetMedia;
     /// <summary>
     ///   Key 1
     /// </summary>
@@ -366,6 +390,30 @@ begin
 end;
 
 //------------------------------------------------------------------------------
+// SET MOUSE
+//------------------------------------------------------------------------------
+procedure TMacroKey.SetMouse(const Mouse: string);
+begin
+  if Mouse <> FMouse then
+  begin
+    FMouse := Mouse;
+    Changed(False);
+  end;
+end;
+
+//------------------------------------------------------------------------------
+// SET MEDIA
+//------------------------------------------------------------------------------
+procedure TMacroKey.SetMedia(const Media: string);
+begin
+  if Media <> FMedia then
+  begin
+    FMedia := Media;
+    Changed(False);
+  end;
+end;
+
+//------------------------------------------------------------------------------
 // SET KEY 1
 //------------------------------------------------------------------------------
 procedure TMacroKey.SetKey1(const Key: string);
@@ -440,6 +488,8 @@ begin
     if Shift then S := S + 'SHIFT ';
     if Alt   then S := S + 'ALT ';
     if Win   then S := S + 'WIN ';
+    if (Mouse <> '') then S := S + Mouse + ' ';
+    if (Media <> '') then S := S + Media + ' ';
     if (Key1 <> '') then S := S + Key1 + ' ';
     if (Key2 <> '') then S := S + Key2 + ' ';
     if (Key3 <> '') then S := S + Key3 + ' ';
@@ -477,6 +527,8 @@ begin
     FShift := (Source as TMacroKey).Shift;
     FAlt   := (Source as TMacroKey).Alt;
     FWin   := (Source as TMacroKey).Win;
+    FMouse := (Source as TMacroKey).Mouse;
+    FMedia := (Source as TMacroKey).Media;
     FKey1  := (Source as TMacroKey).Key1;
     FKey2  := (Source as TMacroKey).Key2;
     FKey3  := (Source as TMacroKey).Key3;
@@ -606,8 +658,8 @@ begin
   FKeys := TMacroKeys.Create(Self);
   // Set change handler
   FKeys.OnChange := KeysChanged;
-  // Create new config
-  New;
+  // Create new config if not in design mode
+  if not (csDesigning in ComponentState) then New;
 end;
 
 //------------------------------------------------------------------------------
@@ -695,6 +747,8 @@ begin
       MacroKey.Shift := JSONObject.GetValue<Boolean>('Shift');
       MacroKey.Alt := JSONObject.GetValue<Boolean>('Alt');
       MacroKey.Win := JSONObject.GetValue<Boolean>('Win');
+      MacroKey.Mouse := JSONObject.GetValue<string>('Mouse');
+      MacroKey.Media := JSONObject.GetValue<string>('Media');
       MacroKey.Key1 := JSONObject.GetValue<string>('Key1');
       MacroKey.Key2 := JSONObject.GetValue<string>('Key2');
       MacroKey.Key3 := JSONObject.GetValue<string>('Key3');
@@ -734,6 +788,8 @@ begin
       JSONObject.AddPair('Shift', TJSONBool.Create(MacroKey.Shift));
       JSONObject.AddPair('Alt', TJSONBool.Create(MacroKey.Alt));
       JSONObject.AddPair('Win', TJSONBool.Create(MacroKey.Win));
+      JSONObject.AddPair('Mouse', MacroKey.Mouse);
+      JSONObject.AddPair('Media', MacroKey.Media);
       JSONObject.AddPair('Key1', MacroKey.Key1);
       JSONObject.AddPair('Key2', MacroKey.Key2);
       JSONObject.AddPair('Key3', MacroKey.Key3);

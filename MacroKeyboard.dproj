@@ -88,6 +88,7 @@
         <Icon_MainIcon>Resources\Icon.ico</Icon_MainIcon>
         <UWP_DelphiLogo44>Resources\Icon.png</UWP_DelphiLogo44>
         <UWP_DelphiLogo150>Resources\Icon.png</UWP_DelphiLogo150>
+        <VerInfo_IncludeVerInfo>true</VerInfo_IncludeVerInfo>
     </PropertyGroup>
     <PropertyGroup Condition="'$(Cfg_2)'!=''">
         <DCC_LocalDebugSymbols>false</DCC_LocalDebugSymbols>
@@ -112,6 +113,22 @@
         <DCCReference Include="Units\HID.MacroKeyboard.pas"/>
         <DCCReference Include="Units\HID.MacroKeyboard.Component.pas"/>
         <DCCReference Include="Units\HID.MacroKeyboard.Config.pas"/>
+        <DCCReference Include="Units\untKeyMacro.pas">
+            <Form>frmKeyMacro</Form>
+            <FormType>dfm</FormType>
+        </DCCReference>
+        <DCCReference Include="..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Ext.pas"/>
+        <DCCReference Include="..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Fixes.pas"/>
+        <DCCReference Include="..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Utils.ComCtrls.pas"/>
+        <DCCReference Include="..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Utils.Forms.pas"/>
+        <DCCReference Include="..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Utils.Graphics.pas"/>
+        <DCCReference Include="..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Utils.Menus.pas"/>
+        <DCCReference Include="..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Utils.Misc.pas"/>
+        <DCCReference Include="..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Utils.pas"/>
+        <DCCReference Include="..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Utils.ScreenTips.pas"/>
+        <DCCReference Include="..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Utils.StdCtrls.pas"/>
+        <DCCReference Include="..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Utils.SysControls.pas"/>
+        <DCCReference Include="..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.UxTheme.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

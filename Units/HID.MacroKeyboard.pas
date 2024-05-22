@@ -40,6 +40,16 @@ type
   /// </summary>
   TModifierCode = Byte;
 
+type
+  /// <summary>
+  ///   Key Codes Array Type
+  /// </summary>
+  TKeyCodes = array of TKeyCode;
+  /// <summary>
+  ///   Modifier Codes Array Type
+  /// </summary>
+  TModifierCodes = array of TModifierCode;
+
 const
   /// <summary>
   ///   Macro Type KEY
@@ -627,52 +637,47 @@ const
   ///   Left Win (Windows) key
   /// </summary>
   MOD_WIN: TModifierCode = $08;
-  /// <summary>
-  ///   Right Control key
-  /// </summary>
-  MOD_RCTRL: TModifierCode = $10;
-  /// <summary>
-  ///   Right Shift key
-  /// </summary>
-  MOD_RSHIFT: TModifierCode = $20;
-  /// <summary>
-  ///   Right Alt key
-  /// </summary>
-  MOD_RALT: TModifierCode = $40;
-  /// <summary>
-  ///   Right Win (Windows) key
-  /// </summary>
-  MOD_RWIN: TModifierCode = $80;
 
+/// <summary>
+///   Create a Keyboard Key Macro
+/// </summary>
+/// <param name="MacroKey">Index of the key in the Macro Keyboard</param>
+/// <param name="KeyCodes">Key codes</param>
+/// <param name="Modifiers">Modifier keys (Ctrl, Shift, Alt)</param>
+/// <returns>Macro as array of Bytes.</returns>
+function CreateKeyboardKeyMacro(const MacroKey: Byte; const KeyCodes: TKeyCodes; const Modifiers: TModifierCodes): THIDMacro;
 /// <summary>
 ///   Create a Mouse Key Macro
 /// </summary>
 /// <param name="MacroKey">Index of the key in the Macro Keyboard</param>
 /// <param name="MouseKey">Mouse Key</param>
 /// <returns>Macro as array of Bytes.</returns>
-function CreateMouseKeyMacro(const MacroKey: TKeyCode; const MouseKey: TMouseKeyCode): THIDMacro;
+function CreateMouseKeyMacro(const MacroKey: Byte; const MouseKey: TMouseKeyCode; const Modifiers: TModifierCodes): THIDMacro;
 /// <summary>
 ///   Create a Mouse Wheel Macro
 /// </summary>
 /// <param name="MacroKey">Index of the key in the Macro Keyboard</param>
 /// <param name="Wheel">Wheel direction/click</param>
-/// <param name="Modifier">Modifier key (Ctrl, Shift, Alt)</param>
+/// <param name="Modifiers">Modifier keys (Ctrl, Shift, Alt)</param>
 /// <returns>Macro as array of Bytes.</returns>
-function CreateMouseWheelMacro(const MacroKey: TKeyCode; const Wheel: TMouseWheelCode; const Modifier: TModifierCode): THIDMacro;
+function CreateMouseWheelMacro(const MacroKey: Byte; const Wheel: TMouseWheelCode; const Modifiers: TModifierCodes): THIDMacro;
 /// <summary>
 ///   Create a Media Macro
 /// </summary>
 /// <param name="MacroKey">Index of the key in the Macro Keyboard</param>
 /// <param name="Media">Media Key</param>
 /// <returns>Macro as array of Bytes.</returns>
-function CreateMediaMacro(const MacroKey: TKeyCode; const MediaKey: TMediaCode): THIDMacro;
+function CreateMediaMacro(const MacroKey: Byte; const MediaKey: TMediaCode): THIDMacro;
 
 implementation
 
 //------------------------------------------------------------------------------
-// CREATE MOUSE KEY MACRO
+// CREATE KEYBOARD KEY MACRO
 //------------------------------------------------------------------------------
-function CreateMouseKeyMacro(const MacroKey: TKeyCode; const MouseKey: TMouseKeyCode): THIDMacro;
+function CreateKeyboardKeyMacro(const MacroKey: Byte; const KeyCodes: TKeyCodes; const Modifiers: TModifierCodes): THIDMacro;
+var
+  I: Integer;
+  ModifiersCode: TModifierCode;
 begin
   // Set length of the Macro command
   SetLength(Result, MACRO_DATA_LENGTH);
@@ -680,6 +685,44 @@ begin
   FillChar(Result, MACRO_DATA_LENGTH, 0);
   // Set the Macro Key Index
   Result[0] := MacroKey;
+  // Append the modifiers to a single value
+  ModifiersCode := $00;
+  for I := Low(Modifiers) to High(Modifiers) do ModifiersCode := ModifiersCode + Modifiers[I];
+  // Set the Modifier
+  Result[1] := ModifiersCode;
+  // Set Key 1
+  if Length(KeyCodes) >= 1 then Result[3] := KeyCodes[0];
+  // Set Key 2
+  if Length(KeyCodes) >= 2 then Result[4] := KeyCodes[1];
+  // Set Key 3
+  if Length(KeyCodes) >= 3 then Result[5] := KeyCodes[2];
+  // Set Key 4
+  if Length(KeyCodes) >= 4 then Result[6] := KeyCodes[3];
+  // Set Key 5
+  if Length(KeyCodes)  = 5 then Result[7] := KeyCodes[4];
+  // Set the Macro Type
+  Result[8] := MACRO_KEY;
+end;
+
+//------------------------------------------------------------------------------
+// CREATE MOUSE KEY MACRO
+//------------------------------------------------------------------------------
+function CreateMouseKeyMacro(const MacroKey: Byte; const MouseKey: TMouseKeyCode; const Modifiers: TModifierCodes): THIDMacro;
+var
+  I: Integer;
+  ModifiersCode: TModifierCode;
+begin
+  // Set length of the Macro command
+  SetLength(Result, MACRO_DATA_LENGTH);
+  // Fill the Macro command with zero's
+  FillChar(Result, MACRO_DATA_LENGTH, 0);
+  // Set the Macro Key Index
+  Result[0] := MacroKey;
+  // Append the modifiers to a single value
+  ModifiersCode := $00;
+  for I := Low(Modifiers) to High(Modifiers) do ModifiersCode := ModifiersCode + Modifiers[I];
+  // Set the Modifier
+  Result[1] := ModifiersCode;
   // Set the Mouse Key
   Result[3] := MouseKey;
   // Set the Macro Type
@@ -689,7 +732,10 @@ end;
 //------------------------------------------------------------------------------
 // CREATE MOUSE WHEEL MACRO
 //------------------------------------------------------------------------------
-function CreateMouseWheelMacro(const MacroKey: TKeyCode; const Wheel: TMouseWheelCode; const Modifier: TModifierCode): THIDMacro;
+function CreateMouseWheelMacro(const MacroKey: Byte; const Wheel: TMouseWheelCode; const Modifiers: TModifierCodes): THIDMacro;
+var
+  I: Integer;
+  ModifiersCode: TModifierCode;
 begin
   // Set length of the Macro command
   SetLength(Result, MACRO_DATA_LENGTH);
@@ -697,8 +743,11 @@ begin
   FillChar(Result, MACRO_DATA_LENGTH, 0);
   // Set the Macro Key Index
   Result[0] := MacroKey;
+  // Append the modifiers to a single value
+  ModifiersCode := $00;
+  for I := Low(Modifiers) to High(Modifiers) do ModifiersCode := ModifiersCode + Modifiers[I];
   // Set the Modifier
-  Result[1] := Modifier;
+  Result[1] := ModifiersCode;
   // Set the Mouse Wheel
   Result[5] := Wheel;
   // Set the Macro Type
@@ -708,7 +757,7 @@ end;
 //------------------------------------------------------------------------------
 // CREATE MEDIA KEY MACRO
 //------------------------------------------------------------------------------
-function CreateMediaMacro(const MacroKey: TKeyCode; const MediaKey: TMediaCode): THIDMacro;
+function CreateMediaMacro(const MacroKey: Byte; const MediaKey: TMediaCode): THIDMacro;
 begin
   // Set length of the Macro command
   SetLength(Result, MACRO_DATA_LENGTH);

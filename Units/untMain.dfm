@@ -11,6 +11,7 @@ object frmMain: TfrmMain
   Font.Name = 'Segoe UI'
   Font.Style = []
   Menu = MainMenu
+  Position = poScreenCenter
   OnCloseQuery = FormCloseQuery
   OnCreate = FormCreate
   TextHeight = 15
@@ -76,6 +77,7 @@ object frmMain: TfrmMain
     object acSetMacroKey: TAction
       Category = 'Key'
       Caption = 'Set Macro..'
+      OnExecute = acSetMacroKeyExecute
     end
     object acClearKey: TAction
       Category = 'Key'
@@ -105,6 +107,18 @@ object frmMain: TfrmMain
     object acSettings: TAction
       Category = 'File'
       Caption = 'Settings..'
+    end
+    object acZoomIn: TAction
+      Caption = 'Zoom In..'
+      OnExecute = acZoomInExecute
+    end
+    object acZoomOut: TAction
+      Caption = 'Zoom Out..'
+      OnExecute = acZoomOutExecute
+    end
+    object acZoom100: TAction
+      Caption = 'Zoom 100%..'
+      OnExecute = acZoom100Execute
     end
   end
   object MainMenu: TMainMenu
@@ -175,6 +189,21 @@ object frmMain: TfrmMain
         Action = acClearKnob
       end
     end
+    object View1: TMenuItem
+      Caption = 'View'
+      object ZoomIn1: TMenuItem
+        Action = acZoomIn
+      end
+      object ZoomOut1: TMenuItem
+        Action = acZoomOut
+      end
+      object N10: TMenuItem
+        Caption = '-'
+      end
+      object Zoom1001: TMenuItem
+        Action = acZoom100
+      end
+    end
     object Help1: TMenuItem
       Caption = 'Help'
       object About1: TMenuItem
@@ -226,7 +255,6 @@ object frmMain: TfrmMain
   end
   object MacroKeyboardConfig: TMacroKeyboardConfig
     Modified = False
-    OnFilename = MacroKeyboardConfigFilename
     Left = 464
     Top = 8
   end

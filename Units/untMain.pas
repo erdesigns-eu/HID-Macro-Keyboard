@@ -62,6 +62,14 @@ type
     SetClickMacro2: TMenuItem;
     N9: TMenuItem;
     Clear4: TMenuItem;
+    acZoomIn: TAction;
+    acZoomOut: TAction;
+    acZoom100: TAction;
+    View1: TMenuItem;
+    ZoomIn1: TMenuItem;
+    ZoomOut1: TMenuItem;
+    N10: TMenuItem;
+    Zoom1001: TMenuItem;
     MacroKeyboardConfig: TMacroKeyboardConfig;
     procedure MacroKeyboardSelect(Sender: TObject; Index: Integer);
     procedure RepaintTimerTimer(Sender: TObject);
@@ -75,6 +83,10 @@ type
     procedure acExitExecute(Sender: TObject);
     procedure FormCloseQuery(Sender: TObject; var CanClose: Boolean);
     procedure MacroKeyboardConfigFilename(Sender: TObject; Filename: string);
+    procedure acZoomInExecute(Sender: TObject);
+    procedure acZoomOutExecute(Sender: TObject);
+    procedure acZoom100Execute(Sender: TObject);
+    procedure acSetMacroKeyExecute(Sender: TObject);
   private
     /// <summary>
     ///   "Old" window state used in WndProc
@@ -95,6 +107,8 @@ var
 implementation
 
 {$R *.dfm}
+
+uses untKeyMacro;
 
 const
   ApplicationTitle = 'Macro Keyboard';
@@ -313,7 +327,46 @@ end;
 //------------------------------------------------------------------------------
 procedure TfrmMain.MacroKeyboardConfigFilename(Sender: TObject; Filename: string);
 begin
+  // Set the filename in the statusbar
   StatusBar.Panels[0].Text := Filename;
+end;
+
+//------------------------------------------------------------------------------
+// ZOOM IN
+//------------------------------------------------------------------------------
+procedure TfrmMain.acZoomInExecute(Sender: TObject);
+begin
+  MacroKeyboard.Zoom := MacroKeyboard.Zoom + 10;
+end;
+
+//------------------------------------------------------------------------------
+// ZOOM OUT
+//------------------------------------------------------------------------------
+procedure TfrmMain.acZoomOutExecute(Sender: TObject);
+begin
+  MacroKeyboard.Zoom := MacroKeyboard.Zoom - 10;
+end;
+
+//------------------------------------------------------------------------------
+// ZOOM 100%
+//------------------------------------------------------------------------------
+procedure TfrmMain.acZoom100Execute(Sender: TObject);
+begin
+  MacroKeyboard.Zoom := 100;
+end;
+
+//------------------------------------------------------------------------------
+// SET KEY MACRO
+//------------------------------------------------------------------------------
+procedure TfrmMain.acSetMacroKeyExecute(Sender: TObject);
+begin
+  if (MacroKeyboard.SelectedIndex >= 0) and (MacroKeyboard.SelectedIndex <= 11) and (frmKeyMacro.Execute(MacroKeyboard.SelectedIndex, MacroKeyboardConfig.Keys[MacroKeyboard.SelectedIndex]) = MROK) then
+  begin
+    // Update the macro key
+    frmKeyMacro.UpdateMacroKey(MacroKeyboardConfig.Keys[MacroKeyboard.SelectedIndex]);
+    // Update the macro keyboard with the new macro key
+    // todo
+  end;
 end;
 
 end.
