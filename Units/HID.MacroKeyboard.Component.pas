@@ -15,7 +15,7 @@ interface
 uses
   System.SysUtils, System.Classes, Winapi.Windows, Vcl.Controls, Vcl.Graphics,
   Winapi.Messages, System.Types, Vcl.Menus, Vcl.ExtCtrls, Vcl.Themes, Vcl.Forms,
-  Winapi.GDIPAPI, Winapi.GDIPOBJ, HID.MacroKeyboard.Config;
+  Winapi.GDIPAPI, Winapi.GDIPOBJ, HID.MacroKeyboard.Config, HID.MacroKeyboard.Hotkey;
 
 const
   /// <summary>
@@ -86,11 +86,11 @@ const
   /// <summary>
   ///   Keyboard from color (Background)
   /// </summary>
-  KeyboardBackgroundFromColor = $00383838;
+  KeyboardBackgroundFromColor = $00292929;
   /// <summary>
   ///   Keyboard to color (Background)
   /// </summary>
-  KeyboardBackgroundToColor = $00232323;
+  KeyboardBackgroundToColor = $001F1E20;
   /// <summary>
   ///   Keyboard Border color
   /// </summary>
@@ -137,6 +137,14 @@ type
   ///   On Key or Rotary Encoder Select
   /// </summary>
   TMacroKeyboardSelect = procedure(Sender: TObject; Index: Integer) of object;
+  /// <summary>
+  ///   On Hint (Used for showing hints on keys/knobs)
+  /// </summary>
+  TMacroKeyboardHint = procedure(Sender: TObject; Index: Integer; var Hint: string) of object;
+  /// <summary>
+  ///   On Key or Rotary Encoder KeyPress
+  /// </summary>
+  TMacroKeyboardKeyPress = procedure(Sender: TObject; Index: Integer; Key: Word; Shift: TShiftState) of object;
 
 type
   TMacroKeyboard = class(TCustomControl)
@@ -201,9 +209,33 @@ type
     /// </summary>
     FZoom: Integer;
     /// <summary>
+    ///   Zoom on scroll
+    /// </summary>
+    FZoomOnScroll: Boolean;
+    /// <summary>
+    ///   Hint Window
+    /// </summary>
+    FHintWindow: THintWindow;
+    /// <summary>
+    ///   Hint Index flag
+    /// </summary>
+    FHintIndex: Integer;
+    /// <summary>
+    ///   Show hints on keys/knobs
+    /// </summary>
+    FShowKeyHint: Boolean;
+    /// <summary>
     ///   On Select handler
     /// </summary>
     FOnSelect: TMacroKeyboardSelect;
+    /// <summary>
+    ///   On Key/Knob Hint handler
+    /// </summary>
+    FOnKeyKnobHint: TMacroKeyboardHint;
+    /// <summary>
+    ///   On Key/Knob Keypress
+    /// </summary>
+    FOnKeyPress: TMacroKeyboardKeyPress;
 
     /// <summary>
     ///   Set selected Key/Rotary Encoder Index
@@ -221,6 +253,15 @@ type
     ///   Set Zoom
     /// </summary>
     procedure SetZoom(const Zoom: Integer);
+
+    /// <summary>
+    ///   Show Hint
+    /// </summary>
+    procedure ShowHint(const HintText: string; const HintRect: TRect; const KeyIndex: Integer);
+    /// <summary>
+    ///   Hide Hint
+    /// </summary>
+    procedure HideHint;
   protected
     /// <summary>
     ///   Buffer (This is the canvas we draw on)
@@ -312,11 +353,27 @@ type
     ///   Zoom
     /// </summary>
     property Zoom: Integer read FZoom write SetZoom default 100;
+    /// <summary>
+    ///   Zoom on scroll
+    /// </summary>
+    property ZoomOnScroll: Boolean read FZoomOnScroll write FZoomOnScroll default True;
+    /// <summary>
+    ///   Show hints on keys/knobs
+    /// </summary>
+    property ShowKeyHint: Boolean read FShowKeyHint write FShowKeyHint;
 
     /// <summary>
     ///   On Select handler
     /// </summary>
     property OnSelect: TMacroKeyboardSelect read FOnSelect write FOnSelect;
+    /// <summary>
+    ///   On Key/Knob Hint handler
+    /// </summary>
+    property OnKeyKnobHint: TMacroKeyboardHint read FOnKeyKnobHint write FOnKeyKnobHint;
+    /// <summary>
+    ///   On Key/Knob Keypress
+    /// </summary>
+    property OnKeyPress: TMacroKeyboardKeyPress read FOnKeyPress write FOnKeyPress;
 
     /// <summary>
     ///   Alignment
@@ -361,6 +418,17 @@ function PtInTGPRectF(const Rect: TGPRectF; const P: TPoint): Boolean;
 begin
   Result := (P.X >= Rect.X) and (P.X < (Rect.X + Rect.Width)) and
             (P.Y >= Rect.Y) and (P.Y < (Rect.Y + Rect.Height));
+end;
+
+//------------------------------------------------------------------------------
+// TGPRECTF TO TRECT
+//------------------------------------------------------------------------------
+function TGPRectFToTRect(const Rect: TGPRectF): TRect;
+begin
+  Result.Left   := Floor(Rect.X);
+  Result.Top    := Floor(Rect.Y);
+  Result.Right  := Ceil(Rect.X + Rect.Width);
+  Result.Bottom := Ceil(Rect.Y + Rect.Height);
 end;
 
 //------------------------------------------------------------------------------
@@ -431,6 +499,9 @@ begin
 
   // Reset cursor
   Cursor := crDefault;
+
+  // Hide hint
+  if (FHintIndex <> -1) then HideHint;
 end;
 
 //------------------------------------------------------------------------------
@@ -486,6 +557,57 @@ begin
     PaintBuffer;
     //
     Invalidate;
+  end;
+end;
+
+//------------------------------------------------------------------------------
+// SHOW HINT
+//------------------------------------------------------------------------------
+procedure TMacroKeyboard.ShowHint(const HintText: string; const HintRect: TRect; const KeyIndex: Integer);
+var
+  HintWidth, HintHeight: Integer;
+  HintPoint: TPoint;
+  ScreenRect: TRect;
+  HintRectAdjusted: TRect;
+begin
+  if (FHintWindow <> nil) and (FHintIndex = -1) then
+  begin
+    // Calculate the width and height of the hint window
+    HintWidth := FHintWindow.Canvas.TextWidth(HintText) + 6;
+    HintHeight := FHintWindow.Canvas.TextHeight(HintText) + 2;
+
+    // Convert the top-left corner of the hint rectangle to screen coordinates
+    HintPoint := ClientToScreen(Point(HintRect.Left, HintRect.Top));
+
+    // Ensure the hint fits within the screen bounds
+    ScreenRect := Screen.WorkAreaRect;
+
+    // Adjust the hint position if it exceeds the screen bounds
+    if HintPoint.X + HintWidth > ScreenRect.Right then
+      HintPoint.X := ScreenRect.Right - HintWidth;
+    if HintPoint.Y + HintHeight > ScreenRect.Bottom then
+      HintPoint.Y := ScreenRect.Bottom - HintHeight;
+
+    // Create the hint rectangle with the calculated position and size
+    HintRectAdjusted := Rect((HintPoint.X + (HintRect.Width div 2)) - (HintWidth div 2), HintPoint.Y - HintHeight, (HintPoint.X + (HintRect.Width div 2)) + (HintWidth div 2), HintPoint.Y);
+
+    // Set hint index flag
+    FHintIndex := KeyIndex;
+
+    // Activate the hint window with the adjusted hint rectangle and text
+    FHintWindow.ActivateHint(HintRectAdjusted, HintText);
+  end;
+end;
+
+//------------------------------------------------------------------------------
+// HIDE HINT
+//------------------------------------------------------------------------------
+procedure TMacroKeyboard.HideHint;
+begin
+  if FHintWindow <> nil then
+  begin
+    FHintIndex := -1;
+    FHintWindow.ReleaseHandle;
   end;
 end;
 
@@ -1030,6 +1152,8 @@ end;
 procedure TMacroKeyboard.MouseMove(Shift: TShiftState; X, Y: Integer);
 var
   I, Index: Integer;
+  HintText: string;
+  HintRect: TRect;
 begin
   // Call inherited MouseMove
   inherited;
@@ -1058,6 +1182,26 @@ begin
   end else
   begin
     if (Cursor <> crDefault) then Cursor := crDefault;
+  end;
+
+  // Show key/knob hint
+  if Assigned(OnKeyKnobHint) and ShowKeyHint then
+  begin
+    if (Index <> -1) then
+    begin
+      if (FHintIndex <> -1) and (FHintIndex <> Index) then HideHint;
+      if (FHintIndex = -1) then
+      begin
+        // Get key/knob rect
+        HintRect := TGPRectFToTRect(FButtonRects[Index]);
+        // Call hint handler
+        OnKeyKnobHint(Self, Index, HintText);
+        // Show hint
+        if (HintText <> '') then ShowHint(HintText, HintRect, Index);
+      end;
+    end else
+      // Hide hint
+      HideHint;
   end;
 end;
 
@@ -1197,6 +1341,9 @@ begin
 
   // End
   if (Key = VK_END) then SelectedIndex := 14;
+
+  // Notify keypress
+  if Assigned(OnKeyPress) then OnKeyPress(Self, SelectedIndex, Key, Shift);
 end;
 
 //------------------------------------------------------------------------------
@@ -1213,12 +1360,15 @@ end;
 //------------------------------------------------------------------------------
 function TMacroKeyboard.DoMouseWheel(Shift: TShiftState; WheelDelta: Integer; MousePos: TPoint): Boolean;
 begin
-  if WheelDelta > 0 then
-    // Zoom in
-    Zoom := Zoom + 10
-  else
-    // Zoom out
-    Zoom := Zoom - 10;
+  if ZoomOnScroll then
+  begin
+    if WheelDelta > 0 then
+      // Zoom in
+      Zoom := Zoom + 10
+    else
+      // Zoom out
+      Zoom := Zoom - 10;
+  end;
 
   // Call inherited DoMouseWheel
   Result := inherited;
@@ -1249,12 +1399,17 @@ begin
   // Set the buffer pixel format
   FBuffer.PixelFormat := pf32bit;
 
+  // Create key/knob hint window
+  FHintWindow := THintWindow.Create(Self);
+
   // Set defaults
   TabStop := True;
   Width := 550;
   Height := 330;
   FSelectedIndex := -1;
   FZoom := 100;
+  FZoomOnScroll := True;
+  FShowKeyHint  := True;
 
   // Invalidate buffer
   PaintBuffer;
@@ -1267,6 +1422,8 @@ destructor TMacroKeyboard.Destroy;
 begin
   // Free buffer
   FBuffer.Free;
+  // Free hint window
+  FHintWindow.Free;
   // Call inherited destructor
   inherited Destroy;
 end;
@@ -1281,10 +1438,14 @@ begin
   // Assign custom properties
   if (Source is TMacroKeyboard) then
   begin
-    SelectedIndex := (Source as TMacroKeyboard).SelectedIndex;
-    KeyPopupMenu := (Source as TMacroKeyboard).KeyPopupMenu;
-    RotaryEncoderPopupMenu := (Source as TMacroKeyboard).RotaryEncoderPopupMenu;
-    Zoom := (Source as TMacroKeyboard).Zoom;
+    FSelectedIndex := (Source as TMacroKeyboard).SelectedIndex;
+    FKeyPopupMenu := (Source as TMacroKeyboard).KeyPopupMenu;
+    FRotaryEncoderPopupMenu := (Source as TMacroKeyboard).RotaryEncoderPopupMenu;
+    FZoom := (Source as TMacroKeyboard).Zoom;
+    FZoomOnScroll := (Source as TMacroKeyboard).ZoomOnScroll;
+    FShowKeyHint := (Source as TMacroKeyboard).ShowKeyHint;
+    FOnSelect := (Source as TMacroKeyboard).OnSelect;
+    FOnKeyKnobHint := (Source as TMacroKeyboard).OnKeyKnobHint;
   end;
 end;
 
@@ -1307,7 +1468,7 @@ end;
 //------------------------------------------------------------------------------
 procedure Register;
 begin
-  RegisterComponents('ERDesigns', [TMacroKeyboard, TMacroKeyboardConfig]);
+  RegisterComponents('ERDesigns', [TMacroKeyboard, TMacroKeyboardConfig, TMacroKeyboardHotKey]);
 end;
 
 end.

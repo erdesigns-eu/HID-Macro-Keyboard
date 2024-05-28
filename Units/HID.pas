@@ -14,7 +14,7 @@ interface
 
 uses
   WinApi.Windows, System.SysUtils, System.Classes, WinApi.Messages, Vcl.Forms,
-  HID.Types, HID.Constants;
+  HID.Types, HID.Constants, dialogs;
 
 type
   THIDMacro = array of Byte;
@@ -318,6 +318,18 @@ type
     ///   Refresh the list of HID devices.
     /// </summary>
     function Refresh: Boolean;
+    /// <summary>
+    ///   Clear the list of HID devices.
+    /// </summary>
+    procedure Clear;
+    /// <summary>
+    ///   Get the number of devices in the list
+    /// </summary>
+    function Count: Integer;
+    /// <summary>
+    ///   Find device based on product string and interface number
+    /// </summary>
+    function FindDevice(const ProductString: string; const InterfaceNumber: Integer): THIDDevice;
 
     /// <summary>
     ///   Panels
@@ -361,7 +373,7 @@ implementation
 function THIDDevice.Open: Boolean;
 begin
   // Open a handle to the HID device
-  FDeviceHandle := CreateFile(PChar(FDevicePath), GENERIC_READ or GENERIC_WRITE, FILE_SHARE_READ or FILE_SHARE_WRITE, nil, OPEN_EXISTING, 0, 0);
+  FDeviceHandle := CreateFile(PChar(FDevicePath), GENERIC_WRITE, FILE_SHARE_WRITE, nil, OPEN_EXISTING, 0, 0);
   // Check if the handle is valid
   Result := FDeviceHandle <> INVALID_HANDLE_VALUE;
 end;
@@ -380,7 +392,7 @@ end;
 //------------------------------------------------------------------------------
 function THIDDevice.Write(const Macro: THIDMacro): Boolean;
 var
-  BytesWritten: DWORD;
+  BytesWritten: Cardinal;
 begin
   // Write data to the HID device
   Result := WriteFile(FDeviceHandle, Macro[0], Length(Macro), BytesWritten, nil);
@@ -686,6 +698,9 @@ begin
   // Initialize result
   Result := False;
 
+  // Clear the list with HID devices
+  FDevices.Clear;
+
   // Retrieve a handle to a device information set that contains devices that
   // are currently present and expose the specified device interface.
   DeviceInfoSet := SetupDiGetClassDevsW(@GUID_DEVINTERFACE_HID, nil, 0, DIGCF_PRESENT or DIGCF_DEVICEINTERFACE);
@@ -715,6 +730,44 @@ begin
 
   // Set the result to true, indicating success
   Result := True;
+end;
+
+//------------------------------------------------------------------------------
+// CLEAR DEVICES IN THE LIST
+//------------------------------------------------------------------------------
+procedure THIDDeviceList.Clear;
+begin
+  FDevices.Clear;
+end;
+
+//------------------------------------------------------------------------------
+// GET THE NUMBER OF DEVICES IN THE LIST
+//------------------------------------------------------------------------------
+function THIDDeviceList.Count: Integer;
+begin
+  Result := FDevices.Count;
+end;
+
+//------------------------------------------------------------------------------
+// FIND DEVICE BY PRODUCT STRING AND INTERFACE NUMBER
+//------------------------------------------------------------------------------
+function THIDDeviceList.FindDevice(const ProductString: string; const InterfaceNumber: Integer): THIDDevice;
+var
+  I: Integer;
+begin
+  // Set initial result
+  Result := nil;
+  // First refresh the list
+  if not Refresh then Exit;
+  // Try to find the device
+  for I := 0 to Count - 1 do
+  if (CompareText(Devices[I].ProductString, ProductString) = 0) and (Devices[I].InterfaceNumber = InterfaceNumber) then
+  begin
+    // Set result to found device
+    Result := Devices[I];
+    // Break the loop
+    Break;
+  end;
 end;
 
 end.

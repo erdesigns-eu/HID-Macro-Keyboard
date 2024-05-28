@@ -12,18 +12,9 @@ uses
   Vcl.Styles,
   HID.MacroKeyboard.Config in 'Units\HID.MacroKeyboard.Config.pas',
   untKeyMacro in 'Units\untKeyMacro.pas' {frmKeyMacro},
-  Vcl.Styles.Ext in '..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Ext.pas',
-  Vcl.Styles.Fixes in '..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Fixes.pas',
-  Vcl.Styles.Utils.ComCtrls in '..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Utils.ComCtrls.pas',
-  Vcl.Styles.Utils.Forms in '..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Utils.Forms.pas',
-  Vcl.Styles.Utils.Graphics in '..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Utils.Graphics.pas',
-  Vcl.Styles.Utils.Menus in '..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Utils.Menus.pas',
-  Vcl.Styles.Utils.Misc in '..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Utils.Misc.pas',
-  Vcl.Styles.Utils in '..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Utils.pas',
-  Vcl.Styles.Utils.ScreenTips in '..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Utils.ScreenTips.pas',
-  Vcl.Styles.Utils.StdCtrls in '..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Utils.StdCtrls.pas',
-  Vcl.Styles.Utils.SysControls in '..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.Utils.SysControls.pas',
-  Vcl.Styles.UxTheme in '..\..\Component Packs\vcl-styles-utils-master\Common\Vcl.Styles.UxTheme.pas';
+  untKnobMacro in 'Units\untKnobMacro.pas' {frmKnobMacro},
+  untSettings in 'Units\untSettings.pas' {frmSettings},
+  HID.MacroKeyboard.Hotkey in 'Units\HID.MacroKeyboard.Hotkey.pas';
 
 {$R *.res}
 
@@ -32,5 +23,7 @@ begin
   Application.MainFormOnTaskbar := True;
   Application.CreateForm(TfrmMain, frmMain);
   Application.CreateForm(TfrmKeyMacro, frmKeyMacro);
+  Application.CreateForm(TfrmKnobMacro, frmKnobMacro);
+  Application.CreateForm(TfrmSettings, frmSettings);
   Application.Run;
 end.

@@ -13,7 +13,8 @@ unit HID.MacroKeyboard.Config;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.JSON, System.IOUtils;
+  System.SysUtils, System.Classes, System.JSON, System.IOUtils, Vcl.Menus,
+  WinApi.Windows, System.Generics.Collections, HID, HID.MacroKeyboard;
 
 type
   TMacroKey = class(TCollectionItem)
@@ -22,6 +23,10 @@ type
     ///   Macro Key name (Friendly name as indicator / reference)
     /// </summary>
     FName: string;
+    /// <summary>
+    ///   Macro Type (0 = Keyboard, 1 = Mouse, 2 = Media)
+    /// </summary>
+    FType: Integer;
     /// <summary>
     ///   Ctrl Modifier
     /// </summary>
@@ -71,6 +76,10 @@ type
     ///   Set Macro Key name
     /// </summary>
     procedure SetName(const Name: string);
+    /// <summary>
+    ///   Set Macro Type
+    /// </summary>
+    procedure SetType(const &Type: Integer);
     /// <summary>
     ///   Set Ctrl Modifier
     /// </summary>
@@ -134,11 +143,20 @@ type
     ///   Assign
     /// </summary>
     procedure Assign(Source: TPersistent); override;
+
+    /// <summary>
+    ///   To HID Macro
+    /// </summary>
+    function ToHIDMacro(const MacroKey: Byte): THIDMacro;
   published
     /// <summary>
     ///   Macro Key name (Friendly name as indicator / reference)
     /// </summary>
     property Name: string read FName write SetName;
+    /// <summary>
+    ///   Macro Type (0 = Keyboard, 1 = Mouse, 2 = Media)
+    /// </summary>
+    property &Type: Integer read FType write SetType default 0;
     /// <summary>
     ///   Ctrl Modifier
     /// </summary>
@@ -342,6 +360,18 @@ begin
 end;
 
 //------------------------------------------------------------------------------
+// SET TYPE
+//------------------------------------------------------------------------------
+procedure TMacroKey.SetType(const &Type: Integer);
+begin
+  if &Type <> FType then
+  begin
+    FType := &Type;
+    Changed(False);
+  end;
+end;
+
+//------------------------------------------------------------------------------
 // SET CTRL
 //------------------------------------------------------------------------------
 procedure TMacroKey.SetCtrl(const Ctrl: Boolean);
@@ -523,6 +553,7 @@ begin
   if (Source is TMacroKey) then
   begin
     FName  := (Source as TMacroKey).Name;
+    FType  := (Source as TMacroKey).&Type;
     FCtrl  := (Source as TMacroKey).Ctrl;
     FShift := (Source as TMacroKey).Shift;
     FAlt   := (Source as TMacroKey).Alt;
@@ -534,6 +565,59 @@ begin
     FKey3  := (Source as TMacroKey).Key3;
     FKey4  := (Source as TMacroKey).Key4;
     FKey5  := (Source as TMacroKey).Key5;
+  end;
+end;
+
+//------------------------------------------------------------------------------
+// TO HID MACRO
+//------------------------------------------------------------------------------
+function TMacroKey.ToHIDMacro(const MacroKey: Byte): THIDMacro;
+
+  function CtrlModifier: TModifierCode;
+  begin
+    if Ctrl then Result := MOD_CTRL else Result := MOD_NOMOD;
+  end;
+
+  function AltModifier: TModifierCode;
+  begin
+    if Alt then Result := MOD_ALT else Result := MOD_NOMOD;
+  end;
+
+  function ShiftModifier: TModifierCode;
+  begin
+    if Shift then Result := MOD_SHIFT else Result := MOD_NOMOD;
+  end;
+
+  function WinModifier: TModifierCode;
+  begin
+    if Win then Result := MOD_WIN else Result := MOD_NOMOD;
+  end;
+
+begin
+  case &Type of
+    // Keyboard
+    0: begin
+      Result := CreateKeyboardKeyMacro(MacroKey, [TextToKeyCode(Key1), TextToKeyCode(Key2), TextToKeyCode(Key3), TextToKeyCode(Key4), TextToKeyCode(Key5)], [CtrlModifier, AltModifier, ShiftModifier, WinModifier]);
+    end;
+    // Mouse
+    1: begin
+      // Buttons
+      if (Mouse = MouseLeft)       then Result := CreateMouseKeyMacro(MacroKey, MOUSE_LEFT,   [CtrlModifier, AltModifier, ShiftModifier, WinModifier]);
+      if (Mouse = MouseMiddle)     then Result := CreateMouseKeyMacro(MacroKey, MOUSE_CENTER, [CtrlModifier, AltModifier, ShiftModifier, WinModifier]);
+      if (Mouse = MouseRight)      then Result := CreateMouseKeyMacro(MacroKey, MOUSE_RIGHT,  [CtrlModifier, AltModifier, ShiftModifier, WinModifier]);
+      // Wheel
+      if (Mouse = WheelDown)       then Result := CreateMouseWheelMacro(MacroKey, MOUSE_WHEEL_DOWN, [CtrlModifier, AltModifier, ShiftModifier, WinModifier]);
+      if (Mouse = WheelUp)         then Result := CreateMouseWheelMacro(MacroKey, MOUSE_WHEEL_UP,   [CtrlModifier, AltModifier, ShiftModifier, WinModifier]);
+    end;
+    // Media
+    2: begin
+      if (Media = MediaPlayPause)  then Result := CreateMediaMacro(MacroKey, MEDIA_PLAY);
+      if (Media = MediaPrevious)   then Result := CreateMediaMacro(MacroKey, MEDIA_PREV);
+      if (Media = MediaNext)       then Result := CreateMediaMacro(MacroKey, MEDIA_NEXT);
+      if (Media = MediaVolumeUp)   then Result := CreateMediaMacro(MacroKey, MEDIA_VOL_UP);
+      if (Media = MediaVolumeDown) then Result := CreateMediaMacro(MacroKey, MEDIA_VOL_DN);
+      if (Media = MediaMute)       then Result := CreateMediaMacro(MacroKey, MEDIA_MUTE);
+    end;
   end;
 end;
 
@@ -730,6 +814,8 @@ var
   MacroKey: TMacroKey;
   I: Integer;
 begin
+  // Make sure the file exists
+  if not FileExists(Filename) then Exit;
   // Read the configuration file
   JSON := TFile.ReadAllText(FileName);
   // Parse the JSON
@@ -743,6 +829,7 @@ begin
       JSONObject := JSONArray.Items[i] as TJSONObject;
       MacroKey := FKeys.Add;
       MacroKey.Name := JSONObject.GetValue<string>('Name');
+      MacroKey.&Type := JSONObject.GetValue<Integer>('Type');
       MacroKey.Ctrl := JSONObject.GetValue<Boolean>('Ctrl');
       MacroKey.Shift := JSONObject.GetValue<Boolean>('Shift');
       MacroKey.Alt := JSONObject.GetValue<Boolean>('Alt');
@@ -784,6 +871,7 @@ begin
       MacroKey := FKeys[I];
       JSONObject := TJSONObject.Create;
       JSONObject.AddPair('Name', MacroKey.Name);
+      JSONObject.AddPair('Type', TJSONNumber.Create(MacroKey.&Type));
       JSONObject.AddPair('Ctrl', TJSONBool.Create(MacroKey.Ctrl));
       JSONObject.AddPair('Shift', TJSONBool.Create(MacroKey.Shift));
       JSONObject.AddPair('Alt', TJSONBool.Create(MacroKey.Alt));

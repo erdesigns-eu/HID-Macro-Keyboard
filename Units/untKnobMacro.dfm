@@ -1,8 +1,8 @@
-object frmKeyMacro: TfrmKeyMacro
+object frmKnobMacro: TfrmKnobMacro
   Left = 0
   Top = 0
   BorderStyle = bsDialog
-  Caption = 'frmKeyMacro'
+  Caption = 'frmKnobMacro'
   ClientHeight = 586
   ClientWidth = 358
   Color = clBtnFace
@@ -21,7 +21,7 @@ object frmKeyMacro: TfrmKeyMacro
     Align = alBottom
     BevelOuter = bvNone
     ShowCaption = False
-    TabOrder = 6
+    TabOrder = 0
     ExplicitTop = 545
     ExplicitWidth = 354
     object btnOK: TButton
@@ -61,11 +61,11 @@ object frmKeyMacro: TfrmKeyMacro
     AlignWithMargins = True
     Left = 8
     Top = 389
-    Width = 346
+    Width = 342
     Height = 68
     Margins.Left = 8
     Margins.Top = 4
-    Margins.Right = 4
+    Margins.Right = 8
     Margins.Bottom = 0
     Align = alTop
     Caption = ' Mouse: '
@@ -76,19 +76,19 @@ object frmKeyMacro: TfrmKeyMacro
       'Middle Button'
       'Wheel Up'
       'Right Button')
-    TabOrder = 4
+    TabOrder = 1
     Visible = False
-    ExplicitWidth = 342
+    ExplicitWidth = 338
   end
   object rgMacroType: TRadioGroup
     AlignWithMargins = True
     Left = 8
     Top = 61
-    Width = 346
+    Width = 342
     Height = 53
     Margins.Left = 8
     Margins.Top = 4
-    Margins.Right = 4
+    Margins.Right = 8
     Margins.Bottom = 0
     Align = alTop
     Caption = ' Macro Type: '
@@ -98,24 +98,24 @@ object frmKeyMacro: TfrmKeyMacro
       'Keyboard'
       'Mouse'
       'Media')
-    TabOrder = 1
+    TabOrder = 2
     OnClick = rgMacroTypeClick
-    ExplicitWidth = 342
+    ExplicitWidth = 338
   end
   object gbModifiers: TGroupBox
     AlignWithMargins = True
     Left = 8
     Top = 118
-    Width = 346
+    Width = 342
     Height = 76
     Margins.Left = 8
     Margins.Top = 4
-    Margins.Right = 4
+    Margins.Right = 8
     Margins.Bottom = 0
     Align = alTop
     Caption = ' Modifier Keys: '
-    TabOrder = 2
-    ExplicitWidth = 342
+    TabOrder = 3
+    ExplicitWidth = 338
     object cbCtrl: TCheckBox
       Left = 8
       Top = 20
@@ -153,11 +153,11 @@ object frmKeyMacro: TfrmKeyMacro
     AlignWithMargins = True
     Left = 8
     Top = 461
-    Width = 346
+    Width = 342
     Height = 68
     Margins.Left = 8
     Margins.Top = 4
-    Margins.Right = 4
+    Margins.Right = 8
     Margins.Bottom = 0
     Align = alTop
     Caption = ' Media: '
@@ -169,29 +169,29 @@ object frmKeyMacro: TfrmKeyMacro
       'Previous Track'
       'Volume Down'
       'Next Track')
-    TabOrder = 5
+    TabOrder = 4
     Visible = False
-    ExplicitWidth = 342
+    ExplicitWidth = 338
   end
   object gbName: TGroupBox
     AlignWithMargins = True
     Left = 8
     Top = 4
-    Width = 346
+    Width = 342
     Height = 53
     Margins.Left = 8
     Margins.Top = 4
-    Margins.Right = 4
+    Margins.Right = 8
     Margins.Bottom = 0
     Align = alTop
     Caption = ' Name: '
-    TabOrder = 0
-    ExplicitWidth = 342
+    TabOrder = 5
+    ExplicitWidth = 338
     object edtName: TEdit
       AlignWithMargins = True
       Left = 10
       Top = 20
-      Width = 326
+      Width = 322
       Height = 21
       Margins.Left = 8
       Margins.Right = 8
@@ -199,7 +199,7 @@ object frmKeyMacro: TfrmKeyMacro
       Align = alClient
       TabOrder = 0
       TextHint = 'Enter a name for this macro key..'
-      ExplicitWidth = 322
+      ExplicitWidth = 318
       ExplicitHeight = 23
     end
   end
@@ -207,26 +207,26 @@ object frmKeyMacro: TfrmKeyMacro
     AlignWithMargins = True
     Left = 8
     Top = 198
-    Width = 346
+    Width = 342
     Height = 187
     Margins.Left = 8
     Margins.Top = 4
-    Margins.Right = 4
+    Margins.Right = 8
     Margins.Bottom = 0
     Align = alTop
     Caption = ' Keyboard: '
-    TabOrder = 3
-    ExplicitWidth = 342
+    TabOrder = 6
+    ExplicitWidth = 338
     object Panel1: TPanel
       Left = 2
       Top = 17
-      Width = 342
+      Width = 338
       Height = 32
       Align = alTop
       BevelOuter = bvNone
       ShowCaption = False
       TabOrder = 0
-      ExplicitWidth = 338
+      ExplicitWidth = 334
       object Label1: TLabel
         Left = 0
         Top = 0
@@ -242,7 +242,7 @@ object frmKeyMacro: TfrmKeyMacro
         AlignWithMargins = True
         Left = 49
         Top = 6
-        Width = 202
+        Width = 198
         Height = 22
         Margins.Left = 8
         Margins.Top = 6
@@ -251,13 +251,13 @@ object frmKeyMacro: TfrmKeyMacro
         Align = alClient
         ReadOnly = True
         TabOrder = 0
-        ExplicitWidth = 198
+        ExplicitWidth = 194
         ExplicitHeight = 23
       end
       object btnClear1: TButton
         Tag = 1
         AlignWithMargins = True
-        Left = 259
+        Left = 255
         Top = 4
         Width = 75
         Height = 24
@@ -269,19 +269,19 @@ object frmKeyMacro: TfrmKeyMacro
         Caption = 'Clear'
         TabOrder = 1
         OnClick = btnClear1Click
-        ExplicitLeft = 255
+        ExplicitLeft = 251
       end
     end
     object Panel2: TPanel
       Left = 2
       Top = 49
-      Width = 342
+      Width = 338
       Height = 32
       Align = alTop
       BevelOuter = bvNone
       ShowCaption = False
       TabOrder = 1
-      ExplicitWidth = 338
+      ExplicitWidth = 334
       object Label2: TLabel
         Left = 0
         Top = 0
@@ -297,7 +297,7 @@ object frmKeyMacro: TfrmKeyMacro
         AlignWithMargins = True
         Left = 49
         Top = 6
-        Width = 202
+        Width = 198
         Height = 22
         Margins.Left = 8
         Margins.Top = 6
@@ -306,13 +306,13 @@ object frmKeyMacro: TfrmKeyMacro
         Align = alClient
         ReadOnly = True
         TabOrder = 0
-        ExplicitWidth = 198
+        ExplicitWidth = 194
         ExplicitHeight = 23
       end
       object btnClear2: TButton
         Tag = 2
         AlignWithMargins = True
-        Left = 259
+        Left = 255
         Top = 4
         Width = 75
         Height = 24
@@ -324,19 +324,19 @@ object frmKeyMacro: TfrmKeyMacro
         Caption = 'Clear'
         TabOrder = 1
         OnClick = btnClear1Click
-        ExplicitLeft = 255
+        ExplicitLeft = 251
       end
     end
     object Panel3: TPanel
       Left = 2
       Top = 81
-      Width = 342
+      Width = 338
       Height = 32
       Align = alTop
       BevelOuter = bvNone
       ShowCaption = False
       TabOrder = 2
-      ExplicitWidth = 338
+      ExplicitWidth = 334
       object Label3: TLabel
         Left = 0
         Top = 0
@@ -352,7 +352,7 @@ object frmKeyMacro: TfrmKeyMacro
         AlignWithMargins = True
         Left = 49
         Top = 6
-        Width = 202
+        Width = 198
         Height = 22
         Margins.Left = 8
         Margins.Top = 6
@@ -361,13 +361,13 @@ object frmKeyMacro: TfrmKeyMacro
         Align = alClient
         ReadOnly = True
         TabOrder = 0
-        ExplicitWidth = 198
+        ExplicitWidth = 194
         ExplicitHeight = 23
       end
       object btnClear3: TButton
         Tag = 3
         AlignWithMargins = True
-        Left = 259
+        Left = 255
         Top = 4
         Width = 75
         Height = 24
@@ -379,19 +379,19 @@ object frmKeyMacro: TfrmKeyMacro
         Caption = 'Clear'
         TabOrder = 1
         OnClick = btnClear1Click
-        ExplicitLeft = 255
+        ExplicitLeft = 251
       end
     end
     object Panel4: TPanel
       Left = 2
       Top = 113
-      Width = 342
+      Width = 338
       Height = 32
       Align = alTop
       BevelOuter = bvNone
       ShowCaption = False
       TabOrder = 3
-      ExplicitWidth = 338
+      ExplicitWidth = 334
       object Label4: TLabel
         Left = 0
         Top = 0
@@ -407,7 +407,7 @@ object frmKeyMacro: TfrmKeyMacro
         AlignWithMargins = True
         Left = 49
         Top = 6
-        Width = 202
+        Width = 198
         Height = 22
         Margins.Left = 8
         Margins.Top = 6
@@ -416,13 +416,13 @@ object frmKeyMacro: TfrmKeyMacro
         Align = alClient
         ReadOnly = True
         TabOrder = 0
-        ExplicitWidth = 198
+        ExplicitWidth = 194
         ExplicitHeight = 23
       end
       object btnClear4: TButton
         Tag = 4
         AlignWithMargins = True
-        Left = 259
+        Left = 255
         Top = 4
         Width = 75
         Height = 24
@@ -434,19 +434,19 @@ object frmKeyMacro: TfrmKeyMacro
         Caption = 'Clear'
         TabOrder = 1
         OnClick = btnClear1Click
-        ExplicitLeft = 255
+        ExplicitLeft = 251
       end
     end
     object Panel5: TPanel
       Left = 2
       Top = 145
-      Width = 342
+      Width = 338
       Height = 32
       Align = alTop
       BevelOuter = bvNone
       ShowCaption = False
       TabOrder = 4
-      ExplicitWidth = 338
+      ExplicitWidth = 334
       object Label5: TLabel
         Left = 0
         Top = 0
@@ -459,11 +459,10 @@ object frmKeyMacro: TfrmKeyMacro
         Layout = tlCenter
       end
       object edtKey5: TMacroKeyboardHotKey
-        Tag = 5
         AlignWithMargins = True
         Left = 49
         Top = 6
-        Width = 202
+        Width = 198
         Height = 22
         Margins.Left = 8
         Margins.Top = 6
@@ -472,13 +471,13 @@ object frmKeyMacro: TfrmKeyMacro
         Align = alClient
         ReadOnly = True
         TabOrder = 0
-        ExplicitWidth = 198
+        ExplicitWidth = 194
         ExplicitHeight = 23
       end
       object btnClear5: TButton
         Tag = 5
         AlignWithMargins = True
-        Left = 259
+        Left = 255
         Top = 4
         Width = 75
         Height = 24
@@ -490,7 +489,7 @@ object frmKeyMacro: TfrmKeyMacro
         Caption = 'Clear'
         TabOrder = 1
         OnClick = btnClear1Click
-        ExplicitLeft = 255
+        ExplicitLeft = 251
       end
     end
   end

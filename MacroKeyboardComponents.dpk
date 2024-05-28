@@ -34,6 +34,11 @@ requires
 
 contains
   HID.MacroKeyboard.Component in 'Units\HID.MacroKeyboard.Component.pas',
-  HID.MacroKeyboard.Config in 'Units\HID.MacroKeyboard.Config.pas';
+  HID.MacroKeyboard.Config in 'Units\HID.MacroKeyboard.Config.pas',
+  HID.MacroKeyboard.Hotkey in 'Units\HID.MacroKeyboard.Hotkey.pas',
+  HID.Constants in 'Units\HID.Constants.pas',
+  HID in 'Units\HID.pas',
+  HID.Types in 'Units\HID.Types.pas',
+  HID.MacroKeyboard in 'Units\HID.MacroKeyboard.pas';
 
 end.

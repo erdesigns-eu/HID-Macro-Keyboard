@@ -155,6 +155,11 @@
         <DCCReference Include="RESTComponents.dcp"/>
         <DCCReference Include="Units\HID.MacroKeyboard.Component.pas"/>
         <DCCReference Include="Units\HID.MacroKeyboard.Config.pas"/>
+        <DCCReference Include="Units\HID.MacroKeyboard.Hotkey.pas"/>
+        <DCCReference Include="Units\HID.Constants.pas"/>
+        <DCCReference Include="Units\HID.pas"/>
+        <DCCReference Include="Units\HID.Types.pas"/>
+        <DCCReference Include="Units\HID.MacroKeyboard.pas"/>
         <BuildConfiguration Include="Base">
             <Key>Base</Key>
         </BuildConfiguration>

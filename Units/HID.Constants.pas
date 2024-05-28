@@ -26,9 +26,10 @@ const
 
 const
   /// <summary>
-  ///   Macro data length in Bytes.
+  ///   Macro data length in Bytes. (HID report structure)
+  ///   Byte 0 = Report ID, Byte 1 - 64 = Data
   /// </summary>
-  MACRO_DATA_LENGTH = 64;
+  MACRO_DATA_LENGTH = 65;
 
 const
   /// <summary>

@@ -1,4 +1,4 @@
-﻿unit untKeyMacro;
+﻿unit untKnobMacro;
 
 interface
 
@@ -8,7 +8,7 @@ uses
   HID.MacroKeyboard, HID.MacroKeyboard.Config, HID.MacroKeyboard.Hotkey;
 
 type
-  TfrmKeyMacro = class(TForm)
+  TfrmKnobMacro = class(TForm)
     pnlBottom: TPanel;
     btnOK: TButton;
     btnCancel: TButton;
@@ -47,9 +47,9 @@ type
     procedure btnClear1Click(Sender: TObject);
   public
     /// <summary>
-    ///   Execute Key Macro dialog
+    ///   Execute Knob Macro dialog
     /// </summary>
-    function Execute(const KeyIndex: Integer; const Key: TMacroKey): TModalResult;
+    function Execute(const KeyIndex: Integer; const Key: TMacroKey; const Action: string): TModalResult;
     /// <summary>
     ///   Update Macro Key
     /// </summary>
@@ -57,7 +57,7 @@ type
   end;
 
 var
-  frmKeyMacro: TfrmKeyMacro;
+  frmKnobMacro: TfrmKnobMacro;
 
 implementation
 
@@ -66,7 +66,7 @@ implementation
 //------------------------------------------------------------------------------
 // EXECUTE DIALOG
 //------------------------------------------------------------------------------
-function TfrmKeyMacro.Execute(const KeyIndex: Integer; const Key: TMacroKey): TModalResult;
+function TfrmKnobMacro.Execute(const KeyIndex: Integer; const Key: TMacroKey; const Action: string): TModalResult;
 
   procedure LoadKeySettings;
   begin
@@ -119,7 +119,7 @@ begin
   // Load key settings
   LoadKeySettings;
   // Set caption
-  Caption := Format('Set Macro for Key %d', [KeyIndex + 1]);
+  Caption := Format('Set Macro for Knob %d - %s', [KeyIndex - 11, Action]);
   // Show dialog modal
   Result := ShowModal;
 end;
@@ -127,7 +127,7 @@ end;
 //------------------------------------------------------------------------------
 // UPDATE MACRO KEY
 //------------------------------------------------------------------------------
-procedure TfrmKeyMacro.UpdateMacroKey(const Key: TMacroKey);
+procedure TfrmKnobMacro.UpdateMacroKey(const Key: TMacroKey);
 begin
   // Set Name
   Key.Name := edtName.Text;
@@ -202,7 +202,7 @@ end;
 //------------------------------------------------------------------------------
 // CHANGE MACRO TYPE
 //------------------------------------------------------------------------------
-procedure TfrmKeyMacro.rgMacroTypeClick(Sender: TObject);
+procedure TfrmKnobMacro.rgMacroTypeClick(Sender: TObject);
 begin
   case rgMacroType.ItemIndex of
     0: begin
@@ -230,7 +230,7 @@ end;
 //------------------------------------------------------------------------------
 // CLEAR KEYBOARD KEY
 //------------------------------------------------------------------------------
-procedure TfrmKeyMacro.btnClear1Click(Sender: TObject);
+procedure TfrmKnobMacro.btnClear1Click(Sender: TObject);
 begin
   case (Sender as TButton).Tag of
     1: edtKey1.Clear;

@@ -118,7 +118,7 @@ const
   /// <summary>
   ///   Rotary encoder 1 - Left
   /// </summary>
-  KEYBOARD_ROT1_LEFT: Byte = $A1;
+  KEYBOARD_ROT1_LEFT: Byte = $A3;
   /// <summary>
   ///   Rotary encoder 1 - Click
   /// </summary>
@@ -126,11 +126,11 @@ const
   /// <summary>
   ///   Rotary encoder 1 - Right
   /// </summary>
-  KEYBOARD_ROT1_RIGHT: Byte = $A3;
+  KEYBOARD_ROT1_RIGHT: Byte = $A1;
   /// <summary>
   ///   Rotary encoder 2 - Left
   /// </summary>
-  KEYBOARD_ROT2_LEFT: Byte = $A4;
+  KEYBOARD_ROT2_LEFT: Byte = $A6;
   /// <summary>
   ///   Rotary encoder 2 - Click
   /// </summary>
@@ -138,11 +138,11 @@ const
   /// <summary>
   ///   Rotary encoder 2 - Right
   /// </summary>
-  KEYBOARD_ROT2_RIGHT: Byte = $A6;
+  KEYBOARD_ROT2_RIGHT: Byte = $A4;
   /// <summary>
   ///   Rotary encoder 3 - Left
   /// </summary>
-  KEYBOARD_ROT3_LEFT: Byte = $A7;
+  KEYBOARD_ROT3_LEFT: Byte = $A9;
   /// <summary>
   ///   Rotary encoder 3 - Click
   /// </summary>
@@ -150,7 +150,7 @@ const
   /// <summary>
   ///   Rotary encoder 3 - Right
   /// </summary>
-  KEYBOARD_ROT3_RIGHT: Byte = $A9;
+  KEYBOARD_ROT3_RIGHT: Byte = $A7;
 
 const
   /// <summary>
@@ -582,11 +582,11 @@ const
   /// <summary>
   ///   Media Volume Up key
   /// </summary>
-  MEDIA_VOL_UP: TMediaCode = $e9;
+  MEDIA_VOL_UP: TMediaCode = $ea;
   /// <summary>
   ///   Media Volume Down key
   /// </summary>
-  MEDIA_VOL_DN: TMediaCode = $ea;
+  MEDIA_VOL_DN: TMediaCode = $e9;
 
 const
   /// <summary>
@@ -638,6 +638,27 @@ const
   /// </summary>
   MOD_WIN: TModifierCode = $08;
 
+const
+  MouseLeft   = 'Left';
+  MouseMiddle = 'Middle';
+  MouseRight  = 'Right';
+  WheelDown   = 'Up';
+  WheelUp     = 'Down';
+
+const
+  MediaPlayPause  = 'PlayPause';
+  MediaPrevious   = 'Previous';
+  MediaNext       = 'Next';
+  MediaMute       = 'Mute';
+  MediaVolumeUp   = 'VolumeUp';
+  MediaVolumeDown = 'VolumeDown';
+
+/// <summary>
+///   Create a Clear Key Macro
+/// </summary>
+/// <param name="MacroKey">Index of the key in the Macro Keyboard</param>
+/// <returns>Macro as array of Bytes.</returns>
+function CreateClearKeyMacro(const MacroKey: Byte): THIDMacro;
 /// <summary>
 ///   Create a Keyboard Key Macro
 /// </summary>
@@ -668,8 +689,29 @@ function CreateMouseWheelMacro(const MacroKey: Byte; const Wheel: TMouseWheelCod
 /// <param name="Media">Media Key</param>
 /// <returns>Macro as array of Bytes.</returns>
 function CreateMediaMacro(const MacroKey: Byte; const MediaKey: TMediaCode): THIDMacro;
+/// <summary>
+///   TExt to KeyCode
+/// </summary>
+/// <param name="Text">Text representation of the keycode</param>
+/// <returns>Keycode</returns>
+function TextToKeyCode(const Text: string): TKeyCode;
 
 implementation
+
+uses System.SysUtils;
+
+//------------------------------------------------------------------------------
+// CREATE CLEAR KEY MACRO
+//------------------------------------------------------------------------------
+function CreateClearKeyMacro(const MacroKey: Byte): THIDMacro;
+begin
+  // Set length of the Macro command
+  SetLength(Result, MACRO_DATA_LENGTH);
+  // Fill the Macro command with zero's
+  FillChar(Result[0], Length(Result) * SizeOf(Byte), 0);
+  // Set the Macro Key Index
+  Result[1] := MacroKey;
+end;
 
 //------------------------------------------------------------------------------
 // CREATE KEYBOARD KEY MACRO
@@ -682,26 +724,26 @@ begin
   // Set length of the Macro command
   SetLength(Result, MACRO_DATA_LENGTH);
   // Fill the Macro command with zero's
-  FillChar(Result, MACRO_DATA_LENGTH, 0);
+  FillChar(Result[0], Length(Result) * SizeOf(Byte), 0);
   // Set the Macro Key Index
-  Result[0] := MacroKey;
+  Result[1] := MacroKey;
   // Append the modifiers to a single value
   ModifiersCode := $00;
   for I := Low(Modifiers) to High(Modifiers) do ModifiersCode := ModifiersCode + Modifiers[I];
   // Set the Modifier
-  Result[1] := ModifiersCode;
+  Result[2] := ModifiersCode;
   // Set Key 1
-  if Length(KeyCodes) >= 1 then Result[3] := KeyCodes[0];
+  if Length(KeyCodes) >= 1 then Result[4] := KeyCodes[0];
   // Set Key 2
-  if Length(KeyCodes) >= 2 then Result[4] := KeyCodes[1];
+  if Length(KeyCodes) >= 2 then Result[5] := KeyCodes[1];
   // Set Key 3
-  if Length(KeyCodes) >= 3 then Result[5] := KeyCodes[2];
+  if Length(KeyCodes) >= 3 then Result[6] := KeyCodes[2];
   // Set Key 4
-  if Length(KeyCodes) >= 4 then Result[6] := KeyCodes[3];
+  if Length(KeyCodes) >= 4 then Result[7] := KeyCodes[3];
   // Set Key 5
-  if Length(KeyCodes)  = 5 then Result[7] := KeyCodes[4];
+  if Length(KeyCodes)  = 5 then Result[8] := KeyCodes[4];
   // Set the Macro Type
-  Result[8] := MACRO_KEY;
+  Result[9] := MACRO_KEY;
 end;
 
 //------------------------------------------------------------------------------
@@ -715,18 +757,18 @@ begin
   // Set length of the Macro command
   SetLength(Result, MACRO_DATA_LENGTH);
   // Fill the Macro command with zero's
-  FillChar(Result, MACRO_DATA_LENGTH, 0);
+  FillChar(Result[0], Length(Result) * SizeOf(Byte), 0);
   // Set the Macro Key Index
-  Result[0] := MacroKey;
+  Result[1] := MacroKey;
   // Append the modifiers to a single value
   ModifiersCode := $00;
   for I := Low(Modifiers) to High(Modifiers) do ModifiersCode := ModifiersCode + Modifiers[I];
   // Set the Modifier
-  Result[1] := ModifiersCode;
+  Result[2] := ModifiersCode;
   // Set the Mouse Key
-  Result[3] := MouseKey;
+  Result[4] := MouseKey;
   // Set the Macro Type
-  Result[8] := MACRO_MOUSE;
+  Result[9] := MACRO_MOUSE;
 end;
 
 //------------------------------------------------------------------------------
@@ -740,18 +782,18 @@ begin
   // Set length of the Macro command
   SetLength(Result, MACRO_DATA_LENGTH);
   // Fill the Macro command with zero's
-  FillChar(Result, MACRO_DATA_LENGTH, 0);
+  FillChar(Result[0], Length(Result) * SizeOf(Byte), 0);
   // Set the Macro Key Index
-  Result[0] := MacroKey;
+  Result[1] := MacroKey;
   // Append the modifiers to a single value
   ModifiersCode := $00;
   for I := Low(Modifiers) to High(Modifiers) do ModifiersCode := ModifiersCode + Modifiers[I];
   // Set the Modifier
-  Result[1] := ModifiersCode;
+  Result[2] := ModifiersCode;
   // Set the Mouse Wheel
-  Result[5] := Wheel;
+  Result[6] := Wheel;
   // Set the Macro Type
-  Result[8] := MACRO_MOUSE;
+  Result[9] := MACRO_MOUSE;
 end;
 
 //------------------------------------------------------------------------------
@@ -762,13 +804,139 @@ begin
   // Set length of the Macro command
   SetLength(Result, MACRO_DATA_LENGTH);
   // Fill the Macro command with zero's
-  FillChar(Result, MACRO_DATA_LENGTH, 0);
+  FillChar(Result[0], Length(Result) * SizeOf(Byte), 0);
   // Set the Macro Key Index
-  Result[0] := MacroKey;
+  Result[1] := MacroKey;
   // Set the Media Key
-  Result[1] := MediaKey;
+  Result[2] := MediaKey;
   // Set the Macro Type
-  Result[8] := MACRO_MEDIA;
+  Result[9] := MACRO_MEDIA;
+end;
+
+//------------------------------------------------------------------------------
+// TEXT TO KEYCODE
+//------------------------------------------------------------------------------
+function TextToKeyCode(const Text: string): TKeyCode;
+begin
+  // Initialize result
+  Result := KEY_NOKEY;
+
+  // Alphabet (A-Z)
+  if CompareText('A', Text) = 0 then Result := KEY_A;
+  if CompareText('B', Text) = 0 then Result := KEY_B;
+  if CompareText('C', Text) = 0 then Result := KEY_C;
+  if CompareText('D', Text) = 0 then Result := KEY_D;
+  if CompareText('E', Text) = 0 then Result := KEY_E;
+  if CompareText('F', Text) = 0 then Result := KEY_F;
+  if CompareText('G', Text) = 0 then Result := KEY_G;
+  if CompareText('H', Text) = 0 then Result := KEY_H;
+  if CompareText('I', Text) = 0 then Result := KEY_I;
+  if CompareText('J', Text) = 0 then Result := KEY_J;
+  if CompareText('K', Text) = 0 then Result := KEY_K;
+  if CompareText('L', Text) = 0 then Result := KEY_L;
+  if CompareText('M', Text) = 0 then Result := KEY_M;
+  if CompareText('N', Text) = 0 then Result := KEY_N;
+  if CompareText('O', Text) = 0 then Result := KEY_O;
+  if CompareText('P', Text) = 0 then Result := KEY_P;
+  if CompareText('Q', Text) = 0 then Result := KEY_Q;
+  if CompareText('R', Text) = 0 then Result := KEY_R;
+  if CompareText('S', Text) = 0 then Result := KEY_S;
+  if CompareText('T', Text) = 0 then Result := KEY_T;
+  if CompareText('U', Text) = 0 then Result := KEY_U;
+  if CompareText('V', Text) = 0 then Result := KEY_V;
+  if CompareText('W', Text) = 0 then Result := KEY_W;
+  if CompareText('X', Text) = 0 then Result := KEY_X;
+  if CompareText('Y', Text) = 0 then Result := KEY_Y;
+  if CompareText('Z', Text) = 0 then Result := KEY_Z;
+
+  // Numbers (1-0)
+  if CompareText('1', Text) = 0 then Result := KEY_N1;
+  if CompareText('2', Text) = 0 then Result := KEY_N2;
+  if CompareText('3', Text) = 0 then Result := KEY_N3;
+  if CompareText('4', Text) = 0 then Result := KEY_N4;
+  if CompareText('5', Text) = 0 then Result := KEY_N5;
+  if CompareText('6', Text) = 0 then Result := KEY_N6;
+  if CompareText('7', Text) = 0 then Result := KEY_N7;
+  if CompareText('8', Text) = 0 then Result := KEY_N8;
+  if CompareText('9', Text) = 0 then Result := KEY_N9;
+  if CompareText('0', Text) = 0 then Result := KEY_N0;
+
+  // Others
+  if CompareText('RETURN', Text)       = 0 then Result := KEY_ENTER;
+  if CompareText('ESC', Text)          = 0 then Result := KEY_ESCAPE;
+  if CompareText('BACKSPACE', Text)    = 0 then Result := KEY_BSPACE;
+  if CompareText('TAB', Text)          = 0 then Result := KEY_TAB;
+  if CompareText('SPACE', Text)        = 0 then Result := KEY_SPACE;
+  if CompareText('PRINT SCREEN', Text) = 0 then Result := KEY_PSCREEN;
+  if CompareText('PAUSE', Text)        = 0 then Result := KEY_PAUSE;
+  if CompareText('INSERT', Text)       = 0 then Result := KEY_INSERT;
+  if CompareText('DELETE', Text)       = 0 then Result := KEY_DELETE;
+  if CompareText('HOME', Text)         = 0 then Result := KEY_HOME;
+  if CompareText('END', Text)          = 0 then Result := KEY_END;
+  if CompareText('PAGE UP', Text)      = 0 then Result := KEY_PGUP;
+  if CompareText('PAGE DOWN', Text)    = 0 then Result := KEY_PGDOWN;
+
+  // Special characters
+  if CompareText('-', Text) = 0 then Result := KEY_MINUS;
+  if CompareText('=', Text) = 0 then Result := KEY_EQUAL;
+  if CompareText('[', Text) = 0 then Result := KEY_LBRACKET;
+  if CompareText(']', Text) = 0 then Result := KEY_RBRACKET;
+  if CompareText('\', Text) = 0 then Result := KEY_BSLASH;
+  if CompareText('#', Text) = 0 then Result := KEY_NONUS_HASH;
+  if CompareText(';', Text) = 0 then Result := KEY_SCOLON;
+  if CompareText('"', Text) = 0 then Result := KEY_QUOTE;
+  if CompareText('~', Text) = 0 then Result := KEY_GRAVE;
+  if CompareText(',', Text) = 0 then Result := KEY_COMMA;
+  if CompareText('.', Text) = 0 then Result := KEY_DOT;
+  if CompareText('/', Text) = 0 then Result := KEY_SLASH;
+
+  // Lock
+  if CompareText('CAPS LOCK', Text)   = 0 then Result := KEY_CAPSLOCK;
+  if CompareText('SCROLL LOCK', Text) = 0 then Result := KEY_SCROLLLOCK;
+  if CompareText('NUM LOCK', Text)    = 0 then Result := KEY_NUMLOCK;
+
+  // Function
+  if CompareText('F1', Text)  = 0 then Result := KEY_F1;
+  if CompareText('F2', Text)  = 0 then Result := KEY_F2;
+  if CompareText('F3', Text)  = 0 then Result := KEY_F3;
+  if CompareText('F4', Text)  = 0 then Result := KEY_F4;
+  if CompareText('F5', Text)  = 0 then Result := KEY_F5;
+  if CompareText('F6', Text)  = 0 then Result := KEY_F6;
+  if CompareText('F7', Text)  = 0 then Result := KEY_F7;
+  if CompareText('F8', Text)  = 0 then Result := KEY_F8;
+  if CompareText('F9', Text)  = 0 then Result := KEY_F9;
+  if CompareText('F10', Text) = 0 then Result := KEY_F10;
+  if CompareText('F11', Text) = 0 then Result := KEY_F11;
+  if CompareText('F13', Text) = 0 then Result := KEY_F12;
+
+  // Arrow
+  if CompareText('UP', Text)    = 0 then Result := KEY_UP;
+  if CompareText('DOWN', Text)  = 0 then Result := KEY_DOWN;
+  if CompareText('LEFT', Text)  = 0 then Result := KEY_LEFT;
+  if CompareText('RIGHT', Text) = 0 then Result := KEY_RIGHT;
+
+  // Numpad Numbers (1-0)
+  if CompareText('NUMPAD 1', Text) = 0 then Result := KEY_KP_1;
+  if CompareText('NUMPAD 2', Text) = 0 then Result := KEY_KP_2;
+  if CompareText('NUMPAD 3', Text) = 0 then Result := KEY_KP_3;
+  if CompareText('NUMPAD 4', Text) = 0 then Result := KEY_KP_4;
+  if CompareText('NUMPAD 5', Text) = 0 then Result := KEY_KP_5;
+  if CompareText('NUMPAD 6', Text) = 0 then Result := KEY_KP_6;
+  if CompareText('NUMPAD 7', Text) = 0 then Result := KEY_KP_7;
+  if CompareText('NUMPAD 8', Text) = 0 then Result := KEY_KP_8;
+  if CompareText('NUMPAD 9', Text) = 0 then Result := KEY_KP_9;
+  if CompareText('NUMPAD 0', Text) = 0 then Result := KEY_KP_0;
+
+  // Numpad Others
+  if CompareText('NUMPAD *', Text)      = 0 then Result := KEY_KP_ASTERISK;
+  if CompareText('NUMPAD +', Text)      = 0 then Result := KEY_KP_PLUS;
+  if CompareText('NUMPAD ,', Text)      = 0 then Result := KEY_KP_0;
+  if CompareText('NUMPAD -', Text)      = 0 then Result := KEY_KP_MINUS;
+  if CompareText('NUMPAD .', Text)      = 0 then Result := KEY_KP_DOT;
+  if CompareText('NUMPAD /', Text)      = 0 then Result := KEY_KP_SLASH;
+  if CompareText('NUMPAD =', Text)      = 0 then Result := KEY_KP_EQUAL;
+  if CompareText('NUMPAD RETURN', Text) = 0 then Result := KEY_KP_ENTER;
+  if CompareText('NUMPAD POWER', Text)  = 0 then Result := KEY_POWER;
 end;
 
 end.
