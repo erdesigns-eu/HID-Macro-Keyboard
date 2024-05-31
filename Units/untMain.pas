@@ -78,6 +78,8 @@ type
     Exit2: TMenuItem;
     N11: TMenuItem;
     Open2: TMenuItem;
+    AboutDialog: TTaskDialog;
+    ProgressDialog: TTaskDialog;
     procedure MacroKeyboardSelect(Sender: TObject; Index: Integer);
     procedure RepaintTimerTimer(Sender: TObject);
     procedure FormCreate(Sender: TObject);
@@ -528,9 +530,18 @@ end;
 //------------------------------------------------------------------------------
 procedure TfrmMain.acAboutExecute(Sender: TObject);
 const
-  AboutText: string = 'Macro Keyboard Utility Software by ERDesigns.' + sLineBreak + sLineBreak + 'Copyright © Ernst Reidinga.' + sLineBreak + 'V1.0 (25/05/2024)';
+  AboutTitle   : string = 'Macro Keyboard Utility Software';
+  AboutText    : string = 'This is a utility software for programming a 12 Key 3 Knob Macro Keyboard that uses a CH57 chip.' + sLineBreak + sLineBreak +
+                          'These keyboards are commonly found on Amazon and AliExpress.' + sLineBreak + sLineBreak +
+                          'This software might work with other Macro Keyboards too, but they are not directly supported.' + sLineBreak + sLineBreak +
+                          'Copyright © ERDesigns - Ernst Reidinga.';
+  AboutVersion : string = 'Version 1.0 (May 2024)';
 begin
-  TaskMessageDlg(ApplicationTitle, AboutText, mtInformation, [mbOK], 0, mbOK);
+  AboutDialog.Caption      := ApplicationTitle;
+  AboutDialog.Title        := AboutTitle;
+  AboutDialog.Text         := AboutText;
+  AboutDialog.ExpandedText := AboutVersion;
+  AboutDialog.Execute(Handle);
 end;
 
 //------------------------------------------------------------------------------
@@ -606,14 +617,44 @@ end;
 procedure TfrmMain.acOpenAccept(Sender: TObject);
 var
   I: Integer;
+  Macro: THIDMacro;
 begin
   // Open the configuration from the file
   MacroKeyboardConfig.LoadFromFile(acOpen.Dialog.FileName);
-  // Set Macro keys after opening config
-  if FSetMacroKeysOnOpenConfig then
+
+  if FSetMacroKeysOnOpenConfig and Connected then
   begin
-    //
-  end;
+    if FHIDDevice.Open then
+    begin
+      // Assign Key Macros
+      for I := 0 to 11 do
+      begin
+        Macro := MacroKeyboardConfig.Keys[MacroKeyboard.SelectedIndex].ToHIDMacro(I + 1);
+        if not FHIDDevice.Write(Macro) then showmessage(SysErrorMessage(GetLastError));
+      end;
+
+      // Assign Knob Macros
+      for I := 12 to 20 do
+      begin
+        // Knob 1
+        if I = 12 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT1_RIGHT);
+        if I = 13 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT1_LEFT);
+        if I = 14 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT1_CLICK);
+        // Knob 2
+        if I = 15 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT2_RIGHT);
+        if I = 16 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT2_LEFT);
+        if I = 17 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT2_CLICK);
+        // Knob 3
+        if I = 18 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT3_RIGHT);
+        if I = 19 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT3_LEFT);
+        if I = 20 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT3_CLICK);
+      end;
+
+      // Close device
+      FHIDDevice.Close;
+    end;
+  end else
+    Application.MessageBox(PChar(NotConnectedMessage), PChar(ApplicationTitle), MB_ICONWARNING + MB_OK);
 end;
 
 //------------------------------------------------------------------------------
