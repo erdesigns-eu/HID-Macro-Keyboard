@@ -4,3 +4,4 @@ Known bugs:
 - Media "Mute", "Play/Pause" are not working. I need the original software to be able to compare the commands..
 
 This is a first release, so there may be bugs that im not aware of. If you want to help, please submit a pull request.
+Download link: https://github.com/erdesigns-eu/HID-Macro-Keyboard/blob/main/MacroKeyboard.rar
