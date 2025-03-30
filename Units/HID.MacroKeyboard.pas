@@ -907,7 +907,7 @@ begin
   if CompareText('F9', Text)  = 0 then Result := KEY_F9;
   if CompareText('F10', Text) = 0 then Result := KEY_F10;
   if CompareText('F11', Text) = 0 then Result := KEY_F11;
-  if CompareText('F13', Text) = 0 then Result := KEY_F12;
+  if CompareText('F12', Text) = 0 then Result := KEY_F12;
 
   // Arrow
   if CompareText('UP', Text)    = 0 then Result := KEY_UP;
