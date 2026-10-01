@@ -64,6 +64,13 @@ object frmMain: TfrmMain
       ShortCut = 16463
       OnAccept = acOpenAccept
     end
+    object acOpenLayout: TFileOpen
+      Category = 'View'
+      Caption = 'Load &Layout...'
+      Dialog.DefaultExt = '*.json'
+      Dialog.Filter = 'Macro Keyboard Layout|*.json|JSON files|*.json'
+      OnAccept = acOpenLayoutAccept
+    end
     object acSave: TAction
       Category = 'File'
       Caption = 'Save..'
@@ -205,6 +212,12 @@ object frmMain: TfrmMain
     end
     object View1: TMenuItem
       Caption = 'View'
+      object LoadLayout1: TMenuItem
+        Action = acOpenLayout
+      end
+      object N12: TMenuItem
+        Caption = '-'
+      end
       object ZoomIn1: TMenuItem
         Action = acZoomIn
       end

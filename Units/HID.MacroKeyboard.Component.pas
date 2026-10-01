@@ -15,59 +15,14 @@ interface
 uses
   System.SysUtils, System.Classes, Winapi.Windows, Vcl.Controls, Vcl.Graphics,
   Winapi.Messages, System.Types, Vcl.Menus, Vcl.ExtCtrls, Vcl.Themes, Vcl.Forms,
-  Winapi.GDIPAPI, Winapi.GDIPOBJ, HID.MacroKeyboard.Config, HID.MacroKeyboard.Hotkey;
+  Winapi.GDIPAPI, Winapi.GDIPOBJ, HID.MacroKeyboard.Config,
+  HID.MacroKeyboard.Hotkey, HID.MacroKeyboard.Layout;
 
 const
-  /// <summary>
-  ///   Keyboard Width in Milimeters
-  /// </summary>
-  KeyboardWidth = 140;
-  /// <summary>
-  ///   Keyboard Height in Milimeters
-  /// </summary>
-  KeyboardHeight = 83;
-  /// <summary>
-  ///   Keyboard Border Radius in Milimeters
-  /// </summary>
-  KeyboardBorderRadius = 10;
-
-  /// <summary>
-  ///   Key Cap Width in Milimeters
-  /// </summary>
-  KeyCapWidth = 18;
-  /// <summary>
-  ///   Key Cap Height in Milimeters
-  /// </summary>
-  KeyCapHeight = 18;
   /// <summary>
   ///   Key Cap Border Radius in Milimeters
   /// </summary>
   KeyCapBorderRadius = 2;
-  /// <summary>
-  ///   Key Cap Offset in Milimeters
-  /// </summary>
-  KeyCapOffset = 10;
-  /// <summary>
-  ///   Key Cap Space Between in Milimeters
-  /// </summary>
-  KeyCapSpaceBetween = 4;
-
-  /// <summary>
-  ///   Rotary Encoder Width in Milimeters
-  /// </summary>
-  RotaryEncoderWidth = 20;
-  /// <summary>
-  ///   Rotary Encoder Height in Milimeters
-  /// </summary>
-  RotaryEncoderHeight = 20;
-  /// <summary>
-  ///   Rotary Encoder Offset in Milimeters
-  /// </summary>
-  RotaryEncoderOffset = 4;
-  /// <summary>
-  ///   Rotary Encoder Space Between in Milimeters
-  /// </summary>
-  RotaryEncoderSpaceBetween = 5;
 
   /// <summary>
   ///   Screw offset in Milimeters
@@ -147,6 +102,7 @@ type
   TMacroKeyboardKeyPress = procedure(Sender: TObject; Index: Integer; Key: Word; Shift: TShiftState) of object;
 
 type
+  /// <summary>Displays and interacts with a data-driven macro-keyboard layout.</summary>
   TMacroKeyboard = class(TCustomControl)
   private
     /// <summary>
@@ -170,6 +126,8 @@ type
     ///   Button Rects
     /// </summary>
     FButtonRects: TMacroKeyboardButtonRects;
+    /// <summary>Layout used to render and hit-test the keyboard.</summary>
+    FLayout: TMacroKeyboardLayout;
   private
     /// <summary>
     ///   WM_PAINT message handler
@@ -253,6 +211,11 @@ type
     ///   Set Zoom
     /// </summary>
     procedure SetZoom(const Zoom: Integer);
+    /// <summary>Copies a new layout into the component.</summary>
+    procedure SetLayout(const Value: TMacroKeyboardLayout);
+    /// <summary>Finds the closest control in the requested keyboard direction.</summary>
+    function FindAdjacentControl(const Index: Integer; const DeltaX: Integer;
+      const DeltaY: Integer): Integer;
 
     /// <summary>
     ///   Show Hint
@@ -336,6 +299,12 @@ type
     ///   Override repaint method
     /// </summary>
     procedure Repaint; override;
+    /// <summary>Returns the type of the visual control at the specified index.</summary>
+    function ControlKind(const Index: Integer): TMacroKeyboardControlKind;
+    /// <summary>Returns the stable identifier of the visual control at the specified index.</summary>
+    function ControlID(const Index: Integer): string;
+    /// <summary>Loads and applies a validated JSON keyboard layout.</summary>
+    procedure LoadLayoutFromFile(const FileName: string);
   published
     /// <summary>
     ///   Set selected Key/Rotary Encoder Index
@@ -361,6 +330,8 @@ type
     ///   Show hints on keys/knobs
     /// </summary>
     property ShowKeyHint: Boolean read FShowKeyHint write FShowKeyHint;
+    /// <summary>Data-driven physical layout rendered by the component.</summary>
+    property Layout: TMacroKeyboardLayout read FLayout write SetLayout;
 
     /// <summary>
     ///   On Select handler
@@ -509,7 +480,7 @@ end;
 //------------------------------------------------------------------------------
 procedure TMacroKeyboard.SetSelectedIndex(const Index: Integer);
 begin
-  if (Index <> FSelectedIndex) and (Index >= -1) and (Index <= 14) then
+  if (Index <> FSelectedIndex) and (Index >= -1) and (Index < FLayout.Count) then
   begin
     // Set selected Key/Rotary encoder index
     FSelectedIndex := Index;
@@ -557,6 +528,63 @@ begin
     PaintBuffer;
     //
     Invalidate;
+  end;
+end;
+
+//------------------------------------------------------------------------------
+// SET LAYOUT
+//------------------------------------------------------------------------------
+procedure TMacroKeyboard.SetLayout(const Value: TMacroKeyboardLayout);
+begin
+  if not Assigned(Value) or (Value = FLayout) then Exit;
+  Value.Validate;
+  FLayout.Assign(Value);
+  if FSelectedIndex >= FLayout.Count then
+    FSelectedIndex := -1;
+  PaintBuffer;
+  Invalidate;
+end;
+
+//------------------------------------------------------------------------------
+// FIND ADJACENT CONTROL
+//------------------------------------------------------------------------------
+function TMacroKeyboard.FindAdjacentControl(const Index: Integer;
+  const DeltaX: Integer; const DeltaY: Integer): Integer;
+var
+  CandidateCenter: TPointF;
+  CurrentCenter: TPointF;
+  Distance: Double;
+  I: Integer;
+  OffsetX: Single;
+  OffsetY: Single;
+  BestDistance: Double;
+begin
+  Result := Index;
+  if (Index < 0) or (Index >= Length(FButtonRects)) then Exit;
+
+  CurrentCenter := TPointF.Create(
+    FButtonRects[Index].X + (FButtonRects[Index].Width / 2),
+    FButtonRects[Index].Y + (FButtonRects[Index].Height / 2));
+  BestDistance := 1.0E300;
+  for I := 0 to High(FButtonRects) do
+  begin
+    if I = Index then Continue;
+    CandidateCenter := TPointF.Create(
+      FButtonRects[I].X + (FButtonRects[I].Width / 2),
+      FButtonRects[I].Y + (FButtonRects[I].Height / 2));
+    OffsetX := CandidateCenter.X - CurrentCenter.X;
+    OffsetY := CandidateCenter.Y - CurrentCenter.Y;
+    if ((DeltaX < 0) and (OffsetX >= 0)) or
+       ((DeltaX > 0) and (OffsetX <= 0)) or
+       ((DeltaY < 0) and (OffsetY >= 0)) or
+       ((DeltaY > 0) and (OffsetY <= 0)) then Continue;
+
+    Distance := Sqr(OffsetX) + Sqr(OffsetY);
+    if Distance < BestDistance then
+    begin
+      BestDistance := Distance;
+      Result := I;
+    end;
   end;
 end;
 
@@ -781,9 +809,9 @@ var
     Path: TGPGraphicsPath;
   begin
     // Calculate keyboard width
-    W := MmToPixels(KeyboardWidth);
+    W := MmToPixels(FLayout.Width);
     // Calculate keyboard height
-    H := MmToPixels(KeyboardHeight);
+    H := MmToPixels(FLayout.Height);
 
     // Calculate X position
     X := (Width / 2) - (W / 2);
@@ -799,7 +827,7 @@ var
     Pen := TGPPen.Create(SafeColorRefToARGB(KeyboardBorderColor), MmToPixels(0.1));
 
     // Create the keyboard path
-    Path := CreateRoundRectPath(KeyboardRect, MMToPixels(KeyboardBorderRadius));
+    Path := CreateRoundRectPath(KeyboardRect, MMToPixels(FLayout.BorderRadius));
 
     try
       // Draw the keyboard background
@@ -880,9 +908,9 @@ var
     S: string;
   begin
     // Calculate the inner width
-    IW := MmToPixels(KeyCapWidth * 0.75);
+    IW := ButtonRects[Index].Width * 0.75;
     // Calculate the inner height
-    IH := MmToPixels(KeyCapHeight * 0.75);
+    IH := ButtonRects[Index].Height * 0.75;
 
     // Create the outer rect
     OuterRect := MakeRect(
@@ -938,7 +966,7 @@ var
       Graphics.FillPath(InnerBrush, InnerPath);
 
       // Draw key number
-      S := IntToStr(Index + 1);
+      S := FLayout[Index].LabelText;
       Graphics.DrawString(S, Length(S), Font, InnerRect, StringFormat, FontBrush);
     finally
       OuterPath.Free;
@@ -969,9 +997,9 @@ var
     S: string;
   begin
     // Calculate the inner width
-    IW := MmToPixels(KeyCapWidth * 0.9);
+    IW := ButtonRects[Index].Width * 0.9;
     // Calculate the inner height
-    IH := MmToPixels(KeyCapHeight * 0.9);
+    IH := ButtonRects[Index].Height * 0.9;
 
     // Create the outer rect
     OuterRect := MakeRect(
@@ -1027,7 +1055,7 @@ var
       Graphics.DrawLine(InnerPen, X, Y, X, Y + (InnerRect.Height / 4));
 
       // Draw rotary encoder number
-      S := IntToStr(Index - 11);
+      S := FLayout[Index].LabelText;
       Graphics.DrawString(S, Length(S), Font, InnerRect, StringFormat, FontBrush);
     finally
       OuterBrush.Free;
@@ -1042,8 +1070,8 @@ var
   end;
 
 var
-  X, Y, BX, BY: Single;
-  I, J, Index: Integer;
+  ControlBounds: TRectF;
+  I: Integer;
 begin
   // Update the size of the buffer
   Buffer.SetSize(Width, Height);
@@ -1087,59 +1115,19 @@ begin
     // Draw screw Bottom Right
     DrawScrew((KeyboardRect.X + KeyboardRect.Width) - MmToPixels(ScrewOffset), (KeyboardRect.Y + KeyboardRect.Height) - MmToPixels(ScrewOffset));
 
-    // Calculate the X and Y positions
-    X := KeyboardRect.X + MmToPixels(KeyCapOffset);
-    Y := KeyboardRect.Y + MmToPixels(KeyCapOffset);
-
-    // Set the length of the array of key rects (12 Buttons + 3 Rotary encoders)
-    SetLength(FButtonRects, 15);
-
-    // Initialize rects array index
-    Index := 0;
-
-    // Calculate the key rects
-    for J := 0 to 2 do
+    SetLength(FButtonRects, FLayout.Count);
+    for I := 0 to FLayout.Count - 1 do
     begin
-      BX := X;
-      BY := Y + (MmToPixels(KeyCapHeight) * J) + (MmToPixels(KeyCapSpaceBetween) * J);
-      for I := 0 to 3 do
-      begin
-        ButtonRects[Index].X := BX + (I * MmToPixels(KeyCapWidth)) + (I * MmToPixels(KeyCapSpaceBetween));
-        ButtonRects[Index].Y := BY;
-        ButtonRects[Index].Width  := MmToPixels(KeyCapWidth);
-        ButtonRects[Index].Height := MmToPixels(KeyCapHeight);
-        Inc(Index);
+      ControlBounds := FLayout[I].Bounds;
+      ButtonRects[I].X := KeyboardRect.X + MmToPixels(ControlBounds.Left);
+      ButtonRects[I].Y := KeyboardRect.Y + MmToPixels(ControlBounds.Top);
+      ButtonRects[I].Width := MmToPixels(ControlBounds.Width);
+      ButtonRects[I].Height := MmToPixels(ControlBounds.Height);
+      case FLayout[I].Kind of
+        mckKey: DrawKey(I);
+        mckEncoder: DrawRotaryEncoder(I);
       end;
     end;
-
-    // Calculate rotary encoder X position
-    X := ((KeyboardRect.X + KeyboardRect.Width) - MmToPixels(KeyCapOffset)) - MmToPixels(RotaryEncoderWidth);
-
-    // Calculate rotary encoder 1 rect
-    ButtonRects[Index].X := X;
-    ButtonRects[Index].Y := KeyboardRect.Y + MmToPixels(RotaryEncoderOffset);
-    ButtonRects[Index].Width  := MmToPixels(RotaryEncoderWidth);
-    ButtonRects[Index].Height := MmToPixels(RotaryEncoderHeight);
-    Inc(Index);
-
-    // Calculate rotary encoder 2 rect
-    ButtonRects[Index].X := X;
-    ButtonRects[Index].Y := (KeyboardRect.Y + (KeyboardRect.Height / 2)) - (MmToPixels(RotaryEncoderHeight) / 2);
-    ButtonRects[Index].Width  := MmToPixels(RotaryEncoderWidth);
-    ButtonRects[Index].Height := MmToPixels(RotaryEncoderHeight);
-    Inc(Index);
-
-    // Calculate rotary encoder 3 rect
-    ButtonRects[Index].X := X;
-    ButtonRects[Index].Y := ((KeyboardRect.Y + KeyboardRect.Height) - MmToPixels(RotaryEncoderOffset)) - MmToPixels(RotaryEncoderHeight);
-    ButtonRects[Index].Width  := MmToPixels(RotaryEncoderWidth);
-    ButtonRects[Index].Height := MmToPixels(RotaryEncoderHeight);
-
-    // Draw the keys
-    for I := 0 to 11 do DrawKey(I);
-
-    // Draw the rotary encoders
-    for I := 12 to 14 do DrawRotaryEncoder(I);
   finally
     // Free GDI+ Graphics object
     Graphics.Free;
@@ -1247,10 +1235,11 @@ begin
     // Create relative point
     P := TPoint(ClientToScreen(Point(X, Y)));
     // Key PopupMenu
-    if (Index >= 0) and (Index <= 11) and Assigned(KeyPopupMenu) then
+    if (Index >= 0) and (ControlKind(Index) = mckKey) and Assigned(KeyPopupMenu) then
       KeyPopupMenu.Popup(P.X, P.Y);
     // Rotary Encoder PopupMenu
-    if (Index >= 12) and (Index <= 14) and Assigned(RotaryEncoderPopupMenu) then
+    if (Index >= 0) and (ControlKind(Index) = mckEncoder) and
+      Assigned(RotaryEncoderPopupMenu) then
       RotaryEncoderPopupMenu.Popup(P.X, P.Y);
   end;
 end;
@@ -1271,67 +1260,10 @@ begin
   // Initialize index
   Index := SelectedIndex;
 
-  // Arrow left
-  if (Key = VK_LEFT) then
-  begin
-    if ((Index >= 1) and (Index <= 3)) or     // Keys Row 1
-       ((Index >= 5) and (Index <= 7)) or     // Keys Row 2
-       ((Index >= 9) and (Index <= 11))       // keys Row 3
-    then begin
-      SelectedIndex := Index - 1;
-    end;
-
-    if (Index = 12) then SelectedIndex := 3;  // Rotary encoder 1
-    if (Index = 13) then SelectedIndex := 7;  // Rotary encoder 2
-    if (Index = 14) then SelectedIndex := 11; // Rotary encoder 3
-  end;
-
-  // Arrow up
-  if (Key = VK_UP) then
-  begin
-    if (Index = 8) then SelectedIndex := 4;   // Row 3, Key 1
-    if (Index = 4) then SelectedIndex := 0;   // Row 2, Key 1
-    if (Index = 9) then SelectedIndex := 5;   // Row 3, Key 2
-    if (Index = 5) then SelectedIndex := 1;   // Row 2, Key 2
-    if (Index = 10) then SelectedIndex := 6;  // Row 3, Key 3
-    if (Index = 6) then SelectedIndex := 2;   // Row 2, Key 3
-    if (Index = 11) then SelectedIndex := 7;  // Row 3, Key 4
-    if (Index = 7) then SelectedIndex := 3;   // Row 2, Key 4
-
-    if (Index = 14) then SelectedIndex := 13; // Rotary Encoder 3
-    if (Index = 13) then SelectedIndex := 12; // Rotary Encoder 2
-  end;
-
-  // Arrow right
-  if (Key = VK_RIGHT) then
-  begin
-    if ((Index >= 0) and (Index <= 2)) or     // Keys Row 1
-       ((Index >= 4) and (Index <= 6)) or     // Keys Row 2
-       ((Index >= 8) and (Index <= 10))       // keys Row 3
-    then begin
-      SelectedIndex := Index + 1;
-    end;
-
-    if (Index = 3)  then SelectedIndex := 12; // Last key on Row 1
-    if (Index = 7)  then SelectedIndex := 13; // Last key on Row 2
-    if (Index = 11) then SelectedIndex := 14; // Last key on Row 3
-  end;
-
-  // Arrow down
-  if (Key = VK_DOWN) then
-  begin
-    if (Index = 0) then SelectedIndex := 4;   // Row 1, Key 1
-    if (Index = 4) then SelectedIndex := 8;   // Row 2, Key 1
-    if (Index = 1) then SelectedIndex := 5;   // Row 1, Key 2
-    if (Index = 5) then SelectedIndex := 9;   // Row 2, Key 2
-    if (Index = 2) then SelectedIndex := 6;   // Row 1, Key 3
-    if (Index = 6) then SelectedIndex := 10;  // Row 2, Key 3
-    if (Index = 3) then SelectedIndex := 7;   // Row 1, Key 4
-    if (Index = 7) then SelectedIndex := 11;  // Row 2, Key 4
-
-    if (Index = 12) then SelectedIndex := 13; // Rotary Encoder 1
-    if (Index = 13) then SelectedIndex := 14; // Rotary Encoder 2
-  end;
+  if (Key = VK_LEFT) then SelectedIndex := FindAdjacentControl(Index, -1, 0);
+  if (Key = VK_UP) then SelectedIndex := FindAdjacentControl(Index, 0, -1);
+  if (Key = VK_RIGHT) then SelectedIndex := FindAdjacentControl(Index, 1, 0);
+  if (Key = VK_DOWN) then SelectedIndex := FindAdjacentControl(Index, 0, 1);
 
   // Escape
   if (Key = VK_ESCAPE) then SelectedIndex := -1;
@@ -1340,7 +1272,7 @@ begin
   if (Key = VK_HOME) then SelectedIndex := 0;
 
   // End
-  if (Key = VK_END) then SelectedIndex := 14;
+  if (Key = VK_END) then SelectedIndex := FLayout.Count - 1;
 
   // Notify keypress
   if Assigned(OnKeyPress) then OnKeyPress(Self, SelectedIndex, Key, Shift);
@@ -1399,6 +1331,10 @@ begin
   // Set the buffer pixel format
   FBuffer.PixelFormat := pf32bit;
 
+  // Create the data-driven layout and preserve the original appearance by default.
+  FLayout := TMacroKeyboardLayout.Create;
+  FLayout.CreateDefault;
+
   // Create key/knob hint window
   FHintWindow := THintWindow.Create(Self);
 
@@ -1420,6 +1356,8 @@ end;
 //------------------------------------------------------------------------------
 destructor TMacroKeyboard.Destroy;
 begin
+  // Free layout
+  FLayout.Free;
   // Free buffer
   FBuffer.Free;
   // Free hint window
@@ -1444,8 +1382,41 @@ begin
     FZoom := (Source as TMacroKeyboard).Zoom;
     FZoomOnScroll := (Source as TMacroKeyboard).ZoomOnScroll;
     FShowKeyHint := (Source as TMacroKeyboard).ShowKeyHint;
+    FLayout.Assign((Source as TMacroKeyboard).Layout);
     FOnSelect := (Source as TMacroKeyboard).OnSelect;
     FOnKeyKnobHint := (Source as TMacroKeyboard).OnKeyKnobHint;
+  end;
+end;
+
+//------------------------------------------------------------------------------
+// GET CONTROL KIND
+//------------------------------------------------------------------------------
+function TMacroKeyboard.ControlKind(const Index: Integer): TMacroKeyboardControlKind;
+begin
+  Result := FLayout[Index].Kind;
+end;
+
+//------------------------------------------------------------------------------
+// GET CONTROL IDENTIFIER
+//------------------------------------------------------------------------------
+function TMacroKeyboard.ControlID(const Index: Integer): string;
+begin
+  Result := FLayout[Index].ID;
+end;
+
+//------------------------------------------------------------------------------
+// LOAD LAYOUT FROM FILE
+//------------------------------------------------------------------------------
+procedure TMacroKeyboard.LoadLayoutFromFile(const FileName: string);
+var
+  LoadedLayout: TMacroKeyboardLayout;
+begin
+  LoadedLayout := TMacroKeyboardLayout.Create;
+  try
+    LoadedLayout.LoadFromFile(FileName);
+    SetLayout(LoadedLayout);
+  finally
+    LoadedLayout.Free;
   end;
 end;
 

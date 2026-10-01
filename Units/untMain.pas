@@ -18,6 +18,7 @@ type
     acNew: TAction;
     MainMenu: TMainMenu;
     acOpen: TFileOpen;
+    acOpenLayout: TFileOpen;
     acSaveAs: TFileSaveAs;
     acSave: TAction;
     acExit: TAction;
@@ -66,6 +67,8 @@ type
     acZoomOut: TAction;
     acZoom100: TAction;
     View1: TMenuItem;
+    LoadLayout1: TMenuItem;
+    N12: TMenuItem;
     ZoomIn1: TMenuItem;
     ZoomOut1: TMenuItem;
     N10: TMenuItem;
@@ -87,6 +90,8 @@ type
     procedure acAboutExecute(Sender: TObject);
     procedure acNewExecute(Sender: TObject);
     procedure acOpenAccept(Sender: TObject);
+    /// <summary>Loads a user-selected visual keyboard layout.</summary>
+    procedure acOpenLayoutAccept(Sender: TObject);
     procedure acSaveExecute(Sender: TObject);
     procedure acSaveAsAccept(Sender: TObject);
     procedure acExitExecute(Sender: TObject);
@@ -185,6 +190,8 @@ type
     /// </summary>
     /// <returns>True when all entries were written successfully.</returns>
     function ProgramConfiguration: Boolean;
+    /// <summary>Returns whether the loaded layout matches the supported CH552 action mapping.</summary>
+    function SupportsCurrentProgrammingLayout: Boolean;
     /// <summary>
     ///   On USB Device Arrival
     /// </summary>
@@ -363,6 +370,13 @@ var
 begin
   Result := False;
   if not Connected or not Assigned(FHIDDevice) then Exit;
+  if not SupportsCurrentProgrammingLayout then
+  begin
+    Application.MessageBox(PChar(
+      'The active visual layout does not have a compatible HID protocol definition.'),
+      PChar(ApplicationTitle), MB_ICONWARNING + MB_OK);
+    Exit;
+  end;
 
   if not FHIDDevice.Open then
   begin
@@ -391,6 +405,23 @@ begin
   finally
     FHIDDevice.Close;
   end;
+end;
+
+//------------------------------------------------------------------------------
+// CHECK PROGRAMMING LAYOUT SUPPORT
+//------------------------------------------------------------------------------
+function TfrmMain.SupportsCurrentProgrammingLayout: Boolean;
+var
+  I: Integer;
+begin
+  Result := MacroKeyboard.Layout.Count = 15;
+  if not Result then Exit;
+  for I := 0 to 11 do
+    if not SameText(MacroKeyboard.ControlID(I), Format('key-%d', [I + 1])) then
+      Exit(False);
+  for I := 12 to 14 do
+    if not SameText(MacroKeyboard.ControlID(I), Format('encoder-%d', [I - 11])) then
+      Exit(False);
 end;
 
 //------------------------------------------------------------------------------
@@ -619,8 +650,10 @@ end;
 procedure TfrmMain.MacroKeyboardSelect(Sender: TObject; Index: Integer);
 begin
   // Enable/Disable menu items
-  Key1.Enabled := (Index >= 0) and (Index <= 11);
-  Knob1.Enabled := (Index >= 12) and (Index <= 14);
+  Key1.Enabled := SupportsCurrentProgrammingLayout and (Index >= 0) and
+    (Index <= 11);
+  Knob1.Enabled := SupportsCurrentProgrammingLayout and (Index >= 12) and
+    (Index <= 14);
 end;
 
 //------------------------------------------------------------------------------
@@ -732,6 +765,20 @@ begin
       Application.MessageBox(PChar(NotConnectedMessage), PChar(ApplicationTitle),
         MB_ICONWARNING + MB_OK);
   end;
+end;
+
+//------------------------------------------------------------------------------
+// OPEN VISUAL LAYOUT
+//------------------------------------------------------------------------------
+procedure TfrmMain.acOpenLayoutAccept(Sender: TObject);
+begin
+  MacroKeyboard.LoadLayoutFromFile(acOpenLayout.Dialog.FileName);
+  MacroKeyboard.SelectedIndex := -1;
+  Caption := Format('%s - %s', [ApplicationTitle, MacroKeyboard.Layout.Name]);
+  if not SupportsCurrentProgrammingLayout then
+    Application.MessageBox(PChar(
+      'This layout can be previewed and navigated, but it has no compatible HID protocol definition yet. Device programming is disabled.'),
+      PChar(ApplicationTitle), MB_ICONINFORMATION + MB_OK);
 end;
 
 //------------------------------------------------------------------------------
