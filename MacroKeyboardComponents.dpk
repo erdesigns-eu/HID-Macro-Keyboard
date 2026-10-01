@@ -34,6 +34,13 @@ requires
 
 contains
   HID.MacroKeyboard.Component in 'Units\HID.MacroKeyboard.Component.pas',
+  HID.MacroKeyboard.Layout in 'Units\HID.MacroKeyboard.Layout.pas',
+  HID.MacroKeyboard.DeviceDefinition in 'Units\HID.MacroKeyboard.DeviceDefinition.pas',
+  HID.MacroKeyboard.DeviceCatalog in 'Units\HID.MacroKeyboard.DeviceCatalog.pas',
+  HID.MacroKeyboard.Protocol in 'Units\HID.MacroKeyboard.Protocol.pas',
+  HID.MacroKeyboard.Transport in 'Units\HID.MacroKeyboard.Transport.pas',
+  HID.MacroKeyboard.Transport.Memory in 'Units\HID.MacroKeyboard.Transport.Memory.pas',
+  HID.MacroKeyboard.Diagnostics in 'Units\HID.MacroKeyboard.Diagnostics.pas',
   HID.MacroKeyboard.Config in 'Units\HID.MacroKeyboard.Config.pas',
   HID.MacroKeyboard.Hotkey in 'Units\HID.MacroKeyboard.Hotkey.pas',
   HID.Constants in 'Units\HID.Constants.pas',
