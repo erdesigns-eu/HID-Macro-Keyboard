@@ -6,7 +6,7 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ExtCtrls, Vcl.ComCtrls,
   Vcl.StdCtrls, Vcl.Menus, Vcl.StdActns, System.Actions, Vcl.ActnList, System.UITypes,
-  System.Win.Registry, System.StrUtils, System.Threading,
+  System.Win.Registry, System.StrUtils,
 
   HID, HID.MacroKeyboard.Component, HID.MacroKeyboard.Config, HID.MacroKeyboard;
 
@@ -87,7 +87,6 @@ type
     procedure acAboutExecute(Sender: TObject);
     procedure acNewExecute(Sender: TObject);
     procedure acOpenAccept(Sender: TObject);
-    procedure acOpenBeforeExecute(Sender: TObject);
     procedure acSaveExecute(Sender: TObject);
     procedure acSaveAsAccept(Sender: TObject);
     procedure acExitExecute(Sender: TObject);
@@ -116,6 +115,10 @@ type
     ///   Macro Keyboard HID Device
     /// </summary>
     FHIDDevice: THIDDevice;
+    /// <summary>
+    ///   Debounces Windows device-change notifications on the main thread.
+    /// </summary>
+    FUSBUpdateTimer: TTimer;
 
     /// <summary>
     ///   Macro Keyboard connected flag
@@ -154,6 +157,34 @@ type
     ///   Set Macro Keyboard connected flag
     /// </summary>
     procedure SetConnected(const Connected: Boolean);
+    /// <summary>
+    ///   Refreshes the HID device selection and connection status.
+    /// </summary>
+    procedure RefreshHIDConnection;
+    /// <summary>
+    ///   Schedules a debounced HID device refresh.
+    /// </summary>
+    procedure ScheduleHIDRefresh;
+    /// <summary>
+    ///   Handles the delayed HID device refresh on the main thread.
+    /// </summary>
+    procedure USBUpdateTimerTimer(Sender: TObject);
+    /// <summary>
+    ///   Confirms whether unsaved configuration changes may be discarded.
+    /// </summary>
+    /// <returns>True when the pending operation may continue.</returns>
+    function ConfirmSaveChanges: Boolean;
+    /// <summary>
+    ///   Returns the physical command identifier for a configuration entry.
+    /// </summary>
+    /// <param name="Index">Zero-based configuration entry index.</param>
+    /// <returns>The command identifier expected by the keyboard firmware.</returns>
+    function MacroKeyCode(const Index: Integer): Byte;
+    /// <summary>
+    ///   Programs every entry in the current configuration to the device.
+    /// </summary>
+    /// <returns>True when all entries were written successfully.</returns>
+    function ProgramConfiguration: Boolean;
     /// <summary>
     ///   On USB Device Arrival
     /// </summary>
@@ -204,7 +235,7 @@ const
   /// <summary>
   ///   Confirm save message
   /// </summary>
-  ConfirmSaveMessage: string = 'You have unsafed changes, do you want to save them first?';
+  ConfirmSaveMessage: string = 'You have unsaved changes. Do you want to save them first?';
   /// <summary>
   ///   Not connected message
   /// </summary>
@@ -243,22 +274,131 @@ begin
 end;
 
 //------------------------------------------------------------------------------
+// REFRESH HID CONNECTION
+//------------------------------------------------------------------------------
+procedure TfrmMain.RefreshHIDConnection;
+begin
+  FHIDDevice := nil;
+  if Assigned(FHID) then
+    FHIDDevice := FHID.FindDevice(ProductString, InterfaceNumber);
+  Connected := Assigned(FHIDDevice);
+end;
+
+//------------------------------------------------------------------------------
+// SCHEDULE HID REFRESH
+//------------------------------------------------------------------------------
+procedure TfrmMain.ScheduleHIDRefresh;
+begin
+  if Assigned(FUSBUpdateTimer) then
+  begin
+    // Restart the timer so a burst of notifications causes only one refresh.
+    FUSBUpdateTimer.Enabled := False;
+    FUSBUpdateTimer.Enabled := True;
+  end;
+end;
+
+//------------------------------------------------------------------------------
+// HID REFRESH TIMER
+//------------------------------------------------------------------------------
+procedure TfrmMain.USBUpdateTimerTimer(Sender: TObject);
+begin
+  FUSBUpdateTimer.Enabled := False;
+  RefreshHIDConnection;
+end;
+
+//------------------------------------------------------------------------------
+// CONFIRM SAVE CHANGES
+//------------------------------------------------------------------------------
+function TfrmMain.ConfirmSaveChanges: Boolean;
+begin
+  Result := True;
+  if not MacroKeyboardConfig.Modified then Exit;
+
+  case Application.MessageBox(PChar(ConfirmSaveMessage), PChar(ApplicationTitle),
+    MB_ICONQUESTION + MB_YESNOCANCEL) of
+    ID_YES:
+      begin
+        if FileExists(MacroKeyboardConfig.FileName) then
+          MacroKeyboardConfig.SaveToFile(MacroKeyboardConfig.FileName)
+        else
+          acSaveAs.Execute;
+        Result := not MacroKeyboardConfig.Modified;
+      end;
+    ID_NO:
+      Result := True;
+  else
+    Result := False;
+  end;
+end;
+
+//------------------------------------------------------------------------------
+// GET PHYSICAL MACRO KEY CODE
+//------------------------------------------------------------------------------
+function TfrmMain.MacroKeyCode(const Index: Integer): Byte;
+begin
+  case Index of
+    0..11: Result := Index + 1;
+    12: Result := KEYBOARD_ROT1_RIGHT;
+    13: Result := KEYBOARD_ROT1_LEFT;
+    14: Result := KEYBOARD_ROT1_CLICK;
+    15: Result := KEYBOARD_ROT2_RIGHT;
+    16: Result := KEYBOARD_ROT2_LEFT;
+    17: Result := KEYBOARD_ROT2_CLICK;
+    18: Result := KEYBOARD_ROT3_RIGHT;
+    19: Result := KEYBOARD_ROT3_LEFT;
+    20: Result := KEYBOARD_ROT3_CLICK;
+  else
+    raise ERangeError.CreateFmt('Macro index %d is out of range.', [Index]);
+  end;
+end;
+
+//------------------------------------------------------------------------------
+// PROGRAM CURRENT CONFIGURATION
+//------------------------------------------------------------------------------
+function TfrmMain.ProgramConfiguration: Boolean;
+var
+  ErrorCode: DWORD;
+  I: Integer;
+  Macro: THIDMacro;
+begin
+  Result := False;
+  if not Connected or not Assigned(FHIDDevice) then Exit;
+
+  if not FHIDDevice.Open then
+  begin
+    ErrorCode := GetLastError;
+    Application.MessageBox(PChar(Format(FailedSetMacroMessage,
+      [ErrorCode, SysErrorMessage(ErrorCode)])), PChar(ApplicationTitle),
+      MB_ICONERROR + MB_OK);
+    Exit;
+  end;
+
+  try
+    for I := 0 to MacroKeyboardConfig.Keys.Count - 1 do
+    begin
+      Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(MacroKeyCode(I));
+      if not FHIDDevice.Write(Macro) then
+      begin
+        ErrorCode := GetLastError;
+        Application.MessageBox(PChar(Format(
+          'Failed to program entry %d. Error code: %d, %s',
+          [I + 1, ErrorCode, SysErrorMessage(ErrorCode)])),
+          PChar(ApplicationTitle), MB_ICONERROR + MB_OK);
+        Exit;
+      end;
+    end;
+    Result := True;
+  finally
+    FHIDDevice.Close;
+  end;
+end;
+
+//------------------------------------------------------------------------------
 // ON USB ARRIVAL
 //------------------------------------------------------------------------------
 procedure TfrmMain.OnUSBArrival(Sender: TObject);
 begin
-  if not Connected then
-  TTask.Run(
-    procedure
-    begin
-      // Wait for windows to update the device list
-      Sleep(USBUpdateDelay);
-      // Try to find the macro keyboard
-      FHIDDevice := FHID.FindDevice(ProductString, InterfaceNumber);
-      // Update connected flag
-      Connected := FHIDDevice <> nil;
-    end
-  );
+  ScheduleHIDRefresh;
 end;
 
 //------------------------------------------------------------------------------
@@ -266,18 +406,10 @@ end;
 //------------------------------------------------------------------------------
 procedure TfrmMain.OnUSBRemoval(Sender: TObject);
 begin
-  if Connected then
-  TTask.Run(
-    procedure
-    begin
-      // Wait for windows to update the device list
-      Sleep(USBUpdateDelay);
-      // Try to find the macro keyboard
-      FHIDDevice := FHID.FindDevice(ProductString, InterfaceNumber);
-      // Update connected flag
-      Connected := FHIDDevice <> nil;
-    end
-  );
+  // Prevent new writes through a device that Windows has just removed.
+  FHIDDevice := nil;
+  Connected := False;
+  ScheduleHIDRefresh;
 end;
 
 //------------------------------------------------------------------------------
@@ -350,6 +482,7 @@ procedure TfrmMain.LoadSettings;
 
 var
   Reg: TRegistry;
+  LastOpenedConfig: string;
   X, Y, W, H, S: Integer;
 begin
   Reg := TRegistry.Create;
@@ -403,8 +536,20 @@ begin
       // Load last opened config
       if FLoadLastOpenedConfigOnStart then
       begin
-        // Open the configuration from the file
-        if Reg.ValueExists('LastOpenedConfig') then MacroKeyboardConfig.LoadFromFile(Reg.ReadString('LastOpenedConfig'));
+        if Reg.ValueExists('LastOpenedConfig') then
+        begin
+          LastOpenedConfig := Reg.ReadString('LastOpenedConfig');
+          if FileExists(LastOpenedConfig) then
+          try
+            MacroKeyboardConfig.LoadFromFile(LastOpenedConfig);
+          except
+            on E: Exception do
+              Application.MessageBox(PChar(Format(
+                'The last configuration could not be loaded:%s%s',
+                [sLineBreak, E.Message])), PChar(ApplicationTitle),
+                MB_ICONWARNING + MB_OK);
+          end;
+        end;
       end;
     end else
     begin
@@ -498,14 +643,17 @@ begin
   LoadSettings;
   // Create HID device list
   FHID := THIDDeviceList.Create;
+  // Create the main-thread debounce timer for device notifications.
+  FUSBUpdateTimer := TTimer.Create(Self);
+  FUSBUpdateTimer.Enabled := False;
+  FUSBUpdateTimer.Interval := USBUpdateDelay;
+  FUSBUpdateTimer.OnTimer := USBUpdateTimerTimer;
   // Assign on arrival event handler
   FHID.OnUSBArrival := OnUSBArrival;
   // Assign on removal event handler
   FHID.OnUSBRemoval := OnUSBRemoval;
-  // Try to find the macro keyboard
-  FHIDDevice := FHID.FindDevice(ProductString, InterfaceNumber);
-  // Update connected flag
-  Connected := FHIDDevice <> nil;
+  // Find the macro keyboard and update the connection state.
+  RefreshHIDConnection;
   // Set Caption
   Caption := ApplicationTitle;
   // Set Title
@@ -521,8 +669,17 @@ end;
 //------------------------------------------------------------------------------
 procedure TfrmMain.FormDestroy(Sender: TObject);
 begin
+  Application.OnMinimize := nil;
+  if Assigned(FUSBUpdateTimer) then
+    FUSBUpdateTimer.Enabled := False;
+  if Assigned(FHID) then
+  begin
+    FHID.OnUSBArrival := nil;
+    FHID.OnUSBRemoval := nil;
+  end;
+  FHIDDevice := nil;
   // Destroy HID device list
-  FHID.Destroy;
+  FreeAndNil(FHID);
 end;
 
 //------------------------------------------------------------------------------
@@ -549,31 +706,7 @@ end;
 //------------------------------------------------------------------------------
 procedure TfrmMain.acNewExecute(Sender: TObject);
 begin
-  if MacroKeyboardConfig.Modified then
-  begin
-    case Application.MessageBox(PChar(ConfirmSaveMessage), PChar(ApplicationTitle), MB_ICONQUESTION + MB_YESNOCANCEL) of
-      ID_YES:
-      begin
-        // if the file exists, save it
-        if FileExists(MacroKeyboardConfig.FileName) then
-          MacroKeyboardConfig.SaveToFile(MacroKeyboardConfig.FileName)
-        else
-          // Otherwise execute the save as dialog
-          if not acSaveAs.Execute then Exit;
-      end;
-
-      ID_NO:
-      begin
-        // No need to save changes, do nothing here
-      end;
-
-      ID_CANCEL:
-      begin
-        // Exit here, dont create a new configuration
-        Exit;
-      end;
-    end;
-  end;
+  if not ConfirmSaveChanges then Exit;
 
   // New configuration
   MacroKeyboardConfig.New;
@@ -582,79 +715,23 @@ begin
 end;
 
 //------------------------------------------------------------------------------
-// BEFORE OPEN
-//------------------------------------------------------------------------------
-procedure TfrmMain.acOpenBeforeExecute(Sender: TObject);
-begin
-  if MacroKeyboardConfig.Modified then
-  case Application.MessageBox(PChar(ConfirmSaveMessage), PChar(ApplicationTitle), MB_ICONQUESTION + MB_YESNOCANCEL) of
-    ID_YES:
-    begin
-      // if the file exists, save it
-      if FileExists(MacroKeyboardConfig.FileName) then
-        MacroKeyboardConfig.SaveToFile(MacroKeyboardConfig.FileName)
-      else
-        // Otherwise execute the save as dialog
-        if not acSaveAs.Execute then Exit;
-    end;
-
-    ID_NO:
-    begin
-      // No need to save changes, do nothing here
-    end;
-
-    ID_CANCEL:
-    begin
-      // Exit here, dont create a new configuration
-      Exit;
-    end;
-  end;
-end;
-
-//------------------------------------------------------------------------------
 // OPEN ACCEPT
 //------------------------------------------------------------------------------
 procedure TfrmMain.acOpenAccept(Sender: TObject);
-var
-  I: Integer;
-  Macro: THIDMacro;
 begin
+  if not ConfirmSaveChanges then Exit;
+
   // Open the configuration from the file
   MacroKeyboardConfig.LoadFromFile(acOpen.Dialog.FileName);
 
-  if FSetMacroKeysOnOpenConfig and Connected then
+  if FSetMacroKeysOnOpenConfig then
   begin
-    if FHIDDevice.Open then
-    begin
-      // Assign Key Macros
-      for I := 0 to 11 do
-      begin
-        Macro := MacroKeyboardConfig.Keys[MacroKeyboard.SelectedIndex].ToHIDMacro(I + 1);
-        if not FHIDDevice.Write(Macro) then showmessage(SysErrorMessage(GetLastError));
-      end;
-
-      // Assign Knob Macros
-      for I := 12 to 20 do
-      begin
-        // Knob 1
-        if I = 12 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT1_RIGHT);
-        if I = 13 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT1_LEFT);
-        if I = 14 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT1_CLICK);
-        // Knob 2
-        if I = 15 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT2_RIGHT);
-        if I = 16 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT2_LEFT);
-        if I = 17 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT2_CLICK);
-        // Knob 3
-        if I = 18 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT3_RIGHT);
-        if I = 19 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT3_LEFT);
-        if I = 20 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT3_CLICK);
-      end;
-
-      // Close device
-      FHIDDevice.Close;
-    end;
-  end else
-    Application.MessageBox(PChar(NotConnectedMessage), PChar(ApplicationTitle), MB_ICONWARNING + MB_OK);
+    if Connected then
+      ProgramConfiguration
+    else
+      Application.MessageBox(PChar(NotConnectedMessage), PChar(ApplicationTitle),
+        MB_ICONWARNING + MB_OK);
+  end;
 end;
 
 //------------------------------------------------------------------------------
@@ -691,34 +768,9 @@ end;
 //------------------------------------------------------------------------------
 procedure TfrmMain.FormCloseQuery(Sender: TObject; var CanClose: Boolean);
 begin
-  if MacroKeyboardConfig.Modified then
-  case Application.MessageBox(PChar(ConfirmSaveMessage), PChar(ApplicationTitle), MB_ICONQUESTION + MB_YESNOCANCEL) of
-    ID_YES:
-    begin
-      // if the file exists, save it
-      if FileExists(MacroKeyboardConfig.FileName) then
-        MacroKeyboardConfig.SaveToFile(MacroKeyboardConfig.FileName)
-      else
-        // Otherwise execute the save as dialog
-        if not acSaveAs.Execute then Exit;
-    end;
-
-    ID_NO:
-    begin
-      // No need to save changes, do nothing here
-    end;
-
-    ID_CANCEL:
-    begin
-      // Dont close the form
-      CanClose := False;
-    end;
-  end;
-
-  // Save the settings
-  SaveSettings;
-  // If we make it until here we can close the form.
-  CanClose := True;
+  CanClose := ConfirmSaveChanges;
+  if CanClose then
+    SaveSettings;
 end;
 
 //------------------------------------------------------------------------------

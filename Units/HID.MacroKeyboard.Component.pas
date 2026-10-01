@@ -452,11 +452,11 @@ end;
 //------------------------------------------------------------------------------
 procedure TMacroKeyboard.WMPaint(var Msg: TWMPaint);
 begin
-  inherited;
   // Retrieve the invalidated rectangle
   if not GetUpdateRect(Handle, FUpdateRect, False) then
-  // If no update region, default to the entire client area
-  FUpdateRect := Rect(0, 0, Width, Height);
+    // If no update region, default to the entire client area
+    FUpdateRect := Rect(0, 0, Width, Height);
+  inherited;
 end;
 
 //------------------------------------------------------------------------------
@@ -549,7 +549,7 @@ end;
 //------------------------------------------------------------------------------
 procedure TMacroKeyboard.SetZoom(const Zoom: Integer);
 begin
-  if (Zoom >= 1) and (Zoom <= 1000) then
+  if (Zoom <> FZoom) and (Zoom >= 1) and (Zoom <= 1000) then
   begin
     // Set zoom
     FZoom := Zoom;
@@ -653,10 +653,9 @@ procedure TMacroKeyboard.Resize;
 begin
   // Call inherited Resize
   inherited;
-  // Update the size of the buffer
-  FBuffer.SetSize(Width, Height);
   // Invalidate buffer
   PaintBuffer;
+  Invalidate;
 end;
 
 //------------------------------------------------------------------------------
@@ -668,6 +667,7 @@ begin
   inherited;
   // Invalidate buffer
   PaintBuffer;
+  Invalidate;
 end;
 
 //------------------------------------------------------------------------------
@@ -740,8 +740,8 @@ var
   var
     DPI: Integer;
   begin
-    // Get the DPI of the current screen
-    DPI := Screen.PixelsPerInch;
+    // Get the DPI of the monitor currently hosting this control.
+    DPI := CurrentPPI;
     // Convert millimeters to inches and then multiply by the DPI to get pixels
     Result := (((MM / MM_PER_INCH) * DPI) / 100) * Zoom;
   end;
@@ -920,7 +920,7 @@ var
     // Create font
     FontBrush := TGPSolidBrush.Create(SafeColorRefToARGB(KeyCapBorderColor));
     FontFamily := TGPFontFamily.Create(Self.Font.Name);
-    Font := TGPFont.Create(FontFamily, (MulDiv(Self.Font.Size, Screen.PixelsPerInch, 96) / 100) * Zoom, FontStyle(Self.Font), UnitPoint);
+    Font := TGPFont.Create(FontFamily, (MulDiv(Self.Font.Size, CurrentPPI, 96) / 100) * Zoom, FontStyle(Self.Font), UnitPoint);
     StringFormat := TGPStringFormat.Create;
     StringFormat.SetAlignment(StringAlignmentCenter);
     StringFormat.SetLineAlignment(StringAlignmentCenter);
@@ -1004,7 +1004,7 @@ var
     // Create font
     FontBrush := TGPSolidBrush.Create(SafeColorRefToARGB(KeyCapBorderColor));
     FontFamily := TGPFontFamily.Create(Self.Font.Name);
-    Font := TGPFont.Create(FontFamily, (MulDiv(Self.Font.Size, Screen.PixelsPerInch, 96) / 100) * Zoom, FontStyle(Self.Font), UnitPoint);
+    Font := TGPFont.Create(FontFamily, (MulDiv(Self.Font.Size, CurrentPPI, 96) / 100) * Zoom, FontStyle(Self.Font), UnitPoint);
     StringFormat := TGPStringFormat.Create;
     StringFormat.SetAlignment(StringAlignmentCenter);
     StringFormat.SetLineAlignment(StringAlignmentCenter);
@@ -1454,13 +1454,9 @@ end;
 //------------------------------------------------------------------------------
 procedure TMacroKeyboard.Repaint;
 begin
-  // Call inherited repaint
-  inherited;
-
-  // Invalidate Buffer
+  // Rebuild the buffer before asking Windows to paint it synchronously.
   PaintBuffer;
-  // Invalidate control
-  Invalidate;
+  inherited Repaint;
 end;
 
 //------------------------------------------------------------------------------

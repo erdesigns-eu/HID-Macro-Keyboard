@@ -62,7 +62,6 @@ object frmMain: TfrmMain
       Dialog.DefaultExt = '*.mkc'
       Dialog.Filter = 'Macro Keyboard Config|*.mkc'
       ShortCut = 16463
-      BeforeExecute = acOpenBeforeExecute
       OnAccept = acOpenAccept
     end
     object acSave: TAction
