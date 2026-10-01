@@ -347,6 +347,10 @@ implementation
 
 uses System.StrUtils;
 
+const
+  MacroKeyCount = 21;
+  MaximumConfigurationSize = 1024 * 1024;
+
 //------------------------------------------------------------------------------
 // SET NAME
 //------------------------------------------------------------------------------
@@ -510,6 +514,7 @@ function TMacroKey.GetDisplayName: string;
 var
   S: string;
 begin
+  S := '';
   if (Name <> '') then
     Result := Name
   else
@@ -700,7 +705,7 @@ end;
 //------------------------------------------------------------------------------
 procedure TMacroKeyboardConfig.KeysChanged(Sender: TObject);
 begin
-  FModified := True;
+  Modified := True;
 end;
 
 //------------------------------------------------------------------------------
@@ -809,27 +814,51 @@ end;
 procedure TMacroKeyboardConfig.LoadFromFile(const FileName: string);
 var
   JSON: string;
+  JSONValue: TJSONValue;
   JSONArray: TJSONArray;
   JSONObject: TJSONObject;
   MacroKey: TMacroKey;
+  LoadedKeys: TMacroKeys;
   I: Integer;
 begin
   // Make sure the file exists
-  if not FileExists(Filename) then Exit;
+  if not FileExists(FileName) then
+    raise EFileNotFoundException.CreateFmt('Configuration file "%s" does not exist.',
+      [FileName]);
+  if TFile.GetSize(FileName) > MaximumConfigurationSize then
+    raise EStreamError.CreateFmt('Configuration file "%s" is larger than %d bytes.',
+      [FileName, MaximumConfigurationSize]);
+
   // Read the configuration file
-  JSON := TFile.ReadAllText(FileName);
+  JSON := TFile.ReadAllText(FileName, TEncoding.UTF8);
   // Parse the JSON
-  JSONArray := TJSONObject.ParseJSONValue(JSON) as TJSONArray;
+  JSONValue := TJSONObject.ParseJSONValue(JSON);
+  if not (JSONValue is TJSONArray) then
+  begin
+    JSONValue.Free;
+    raise EConvertError.Create('The configuration root must be a JSON array.');
+  end;
+
+  JSONArray := TJSONArray(JSONValue);
+  LoadedKeys := TMacroKeys.Create(Self);
   try
-    // Clear the macro keys
-    FKeys.Clear;
+    if JSONArray.Count <> MacroKeyCount then
+      raise EConvertError.CreateFmt(
+        'The configuration must contain exactly %d macro entries; found %d.',
+        [MacroKeyCount, JSONArray.Count]);
+
     // Loop over the items in the configuration
     for I := 0 to JSONArray.Count - 1 do
     begin
-      JSONObject := JSONArray.Items[i] as TJSONObject;
-      MacroKey := FKeys.Add;
+      if not (JSONArray.Items[I] is TJSONObject) then
+        raise EConvertError.CreateFmt('Macro entry %d must be a JSON object.', [I + 1]);
+
+      JSONObject := TJSONObject(JSONArray.Items[I]);
+      MacroKey := LoadedKeys.Add;
       MacroKey.Name := JSONObject.GetValue<string>('Name');
       MacroKey.&Type := JSONObject.GetValue<Integer>('Type');
+      if not (MacroKey.&Type in [0, 1, 2]) then
+        raise EConvertError.CreateFmt('Macro entry %d has an invalid type.', [I + 1]);
       MacroKey.Ctrl := JSONObject.GetValue<Boolean>('Ctrl');
       MacroKey.Shift := JSONObject.GetValue<Boolean>('Shift');
       MacroKey.Alt := JSONObject.GetValue<Boolean>('Alt');
@@ -842,11 +871,15 @@ begin
       MacroKey.Key4 := JSONObject.GetValue<string>('Key4');
       MacroKey.Key5 := JSONObject.GetValue<string>('Key5');
     end;
+
+    // Only replace the live configuration after the complete file is valid.
+    FKeys.Assign(LoadedKeys);
     // Update the filename
     Self.FileName := FileName;
     // Update the modified flag
     Modified := False;
   finally
+    LoadedKeys.Free;
     JSONArray.Free;
   end;
 end;
@@ -861,7 +894,18 @@ var
   I: Integer;
   MacroKey: TMacroKey;
   JSONString: string;
+  TargetFileName: string;
+  TemporaryFileName: string;
 begin
+  if FKeys.Count <> MacroKeyCount then
+    raise EInvalidOperation.CreateFmt(
+      'A configuration must contain exactly %d macro entries; found %d.',
+      [MacroKeyCount, FKeys.Count]);
+
+  TargetFileName := TPath.GetFullPath(FileName);
+  TemporaryFileName := TPath.Combine(TPath.GetDirectoryName(TargetFileName),
+    TPath.GetRandomFileName);
+
   // Create a JSON array
   JSONArray := TJSONArray.Create;
   try
@@ -887,14 +931,19 @@ begin
     end;
     // Conver the JSON array to a string
     JSONString := JSONArray.ToString;
-    // Write the JSON string to the configuration file
-    TFile.WriteAllText(FileName, JSONString);
+    // Write beside the destination and atomically replace it after a complete write.
+    TFile.WriteAllText(TemporaryFileName, JSONString, TEncoding.UTF8);
+    if not MoveFileEx(PChar(TemporaryFileName), PChar(TargetFileName),
+      MOVEFILE_REPLACE_EXISTING or MOVEFILE_WRITE_THROUGH) then
+      RaiseLastOSError;
     // Update the filename
-    Self.Filename := Filename;
+    Self.Filename := TargetFileName;
     // Update the modified flag
     Modified := False;
   finally
     JSONArray.Free;
+    if FileExists(TemporaryFileName) then
+      TFile.Delete(TemporaryFileName);
   end;
 end;
 

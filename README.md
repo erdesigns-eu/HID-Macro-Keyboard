@@ -8,6 +8,18 @@ Download link: https://github.com/erdesigns-eu/HID-Macro-Keyboard/blob/main/Macr
 
 The software should be self explainatory, you can click a button/knob to select it and use the menu to clear or assign a macro, or you can use the context menu (right click). You can enable/disable some things in the settings, for now there is no installer because this is jus the first BETA release. After the first bugs will be fixed i will create a installer and maybe add some more functions, documentation, etc.
 
+## Custom keyboard layouts
+
+The visual keyboard can load validated JSON layout files through **View > Load Layout**. Included examples cover 12-key/3-encoder, 9-key/3-encoder, and 6-key/1-encoder arrangements. See [the layout schema and authoring guide](docs/layout-schema.md) for the file format and instructions.
+
+A layout defines drawing and interaction only. Programming a different keyboard also requires a verified USB identity, action mapping, and compiled protocol adapter; the application deliberately disables programming when those pieces are unavailable or incompatible.
+
+Device definitions can be loaded through **View > Load Device Definition**. They select a validated layout, match USB identity information, map controls to profile actions, and request a compiled protocol adapter. See the [device-definition schema](docs/device-definition-schema.md) and [additional protocol investigation](docs/protocol-investigation.md).
+
+Use **Help > Export Diagnostics** to create a sanitized JSON inventory for investigating a new device. Serial numbers, device paths, hardware IDs, and physical locations are excluded by default. Protocol adapters communicate through a transport interface, and an in-memory transport is available for deterministic protocol tests without hardware.
+
+Device definitions can also be loaded into a transactional catalog. Matching is deterministic: the definition with the most VID, PID, interface, and product constraints wins, while equally specific matches are reported as ambiguous. See the [device catalog and protocol test guide](docs/device-catalog-and-tests.md) for catalog behavior and the DUnitX regression suite.
+
 ![Assign a macro to a key](Resources/screen1.png)
 ![Context menu](Resources/screen2.png)
 ![Settings](Resources/Screen3.png)

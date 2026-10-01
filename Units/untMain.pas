@@ -6,9 +6,11 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ExtCtrls, Vcl.ComCtrls,
   Vcl.StdCtrls, Vcl.Menus, Vcl.StdActns, System.Actions, Vcl.ActnList, System.UITypes,
-  System.Win.Registry, System.StrUtils, System.Threading,
+  System.Win.Registry, System.StrUtils,
 
-  HID, HID.MacroKeyboard.Component, HID.MacroKeyboard.Config, HID.MacroKeyboard;
+  HID, HID.MacroKeyboard.Component, HID.MacroKeyboard.Config,
+  HID.MacroKeyboard.DeviceDefinition, HID.MacroKeyboard.Protocol,
+  HID.MacroKeyboard.Transport, HID.MacroKeyboard.Diagnostics;
 
 type
   TfrmMain = class(TForm)
@@ -18,6 +20,9 @@ type
     acNew: TAction;
     MainMenu: TMainMenu;
     acOpen: TFileOpen;
+    acOpenLayout: TFileOpen;
+    acOpenDeviceDefinition: TFileOpen;
+    acExportDiagnostics: TFileSaveAs;
     acSaveAs: TFileSaveAs;
     acSave: TAction;
     acExit: TAction;
@@ -48,6 +53,7 @@ type
     Clear2: TMenuItem;
     Help1: TMenuItem;
     About1: TMenuItem;
+    ExportDiagnostics1: TMenuItem;
     acSettings: TAction;
     N6: TMenuItem;
     RepaintTimer: TTimer;
@@ -66,6 +72,9 @@ type
     acZoomOut: TAction;
     acZoom100: TAction;
     View1: TMenuItem;
+    LoadLayout1: TMenuItem;
+    N12: TMenuItem;
+    LoadDeviceDefinition1: TMenuItem;
     ZoomIn1: TMenuItem;
     ZoomOut1: TMenuItem;
     N10: TMenuItem;
@@ -87,7 +96,12 @@ type
     procedure acAboutExecute(Sender: TObject);
     procedure acNewExecute(Sender: TObject);
     procedure acOpenAccept(Sender: TObject);
-    procedure acOpenBeforeExecute(Sender: TObject);
+    /// <summary>Loads a user-selected visual keyboard layout.</summary>
+    procedure acOpenLayoutAccept(Sender: TObject);
+    /// <summary>Loads a user-selected device and protocol definition.</summary>
+    procedure acOpenDeviceDefinitionAccept(Sender: TObject);
+    /// <summary>Exports a sanitized JSON report for protocol investigation.</summary>
+    procedure acExportDiagnosticsAccept(Sender: TObject);
     procedure acSaveExecute(Sender: TObject);
     procedure acSaveAsAccept(Sender: TObject);
     procedure acExitExecute(Sender: TObject);
@@ -116,6 +130,14 @@ type
     ///   Macro Keyboard HID Device
     /// </summary>
     FHIDDevice: THIDDevice;
+    /// <summary>Active device identity, layout, and action mapping.</summary>
+    FDeviceDefinition: TMacroKeyboardDeviceDefinition;
+    /// <summary>Protocol adapter selected by the active device definition.</summary>
+    FProtocol: IMacroKeyboardProtocol;
+    /// <summary>
+    ///   Debounces Windows device-change notifications on the main thread.
+    /// </summary>
+    FUSBUpdateTimer: TTimer;
 
     /// <summary>
     ///   Macro Keyboard connected flag
@@ -154,6 +176,39 @@ type
     ///   Set Macro Keyboard connected flag
     /// </summary>
     procedure SetConnected(const Connected: Boolean);
+    /// <summary>
+    ///   Refreshes the HID device selection and connection status.
+    /// </summary>
+    procedure RefreshHIDConnection;
+    /// <summary>
+    ///   Schedules a debounced HID device refresh.
+    /// </summary>
+    procedure ScheduleHIDRefresh;
+    /// <summary>
+    ///   Handles the delayed HID device refresh on the main thread.
+    /// </summary>
+    procedure USBUpdateTimerTimer(Sender: TObject);
+    /// <summary>
+    ///   Confirms whether unsaved configuration changes may be discarded.
+    /// </summary>
+    /// <returns>True when the pending operation may continue.</returns>
+    function ConfirmSaveChanges: Boolean;
+    /// <summary>
+    ///   Programs every entry in the current configuration to the device.
+    /// </summary>
+    /// <returns>True when all entries were written successfully.</returns>
+    function ProgramConfiguration: Boolean;
+    /// <summary>Returns whether the loaded layout matches the supported CH552 action mapping.</summary>
+    function SupportsCurrentProgrammingLayout: Boolean;
+    /// <summary>Loads a device definition, its protocol adapter, and associated layout.</summary>
+    procedure LoadDeviceDefinition(const FileName: string);
+    /// <summary>Finds the active mapping for the selected visual control and action.</summary>
+    function SelectedAction(const Action: TMacroKeyboardActionKind):
+      TMacroKeyboardActionMapping;
+    /// <summary>Programs one mapped action and reports transport errors.</summary>
+    function ProgramMappedAction(const Mapping: TMacroKeyboardActionMapping): Boolean;
+    /// <summary>Clears one mapped action and reports transport errors.</summary>
+    function ClearMappedAction(const Mapping: TMacroKeyboardActionMapping): Boolean;
     /// <summary>
     ///   On USB Device Arrival
     /// </summary>
@@ -204,23 +259,11 @@ const
   /// <summary>
   ///   Confirm save message
   /// </summary>
-  ConfirmSaveMessage: string = 'You have unsafed changes, do you want to save them first?';
+  ConfirmSaveMessage: string = 'You have unsaved changes. Do you want to save them first?';
   /// <summary>
   ///   Not connected message
   /// </summary>
   NotConnectedMessage: string = 'The Macro Keyboard is not connected!';
-  /// <summary>
-  ///   Failed to set Macro message
-  /// </summary>
-  FailedSetMacroMessage: string = 'Failed to set Macro. Error code: %d, %s';
-  /// <summary>
-  ///   HID Device Product String
-  /// </summary>
-  ProductString: string = 'CH552';
-  /// <summary>
-  ///   HID Device Interface Number
-  /// </summary>
-  InterfaceNumber: Integer = 1;
   /// <summary>
   ///   HID Device Arrival/Removal delay
   /// </summary>
@@ -243,22 +286,212 @@ begin
 end;
 
 //------------------------------------------------------------------------------
+// REFRESH HID CONNECTION
+//------------------------------------------------------------------------------
+procedure TfrmMain.RefreshHIDConnection;
+var
+  I: Integer;
+begin
+  FHIDDevice := nil;
+  if Assigned(FHID) and Assigned(FDeviceDefinition) and FHID.Refresh then
+    for I := 0 to FHID.Count - 1 do
+      if FDeviceDefinition.Match.Matches(FHID[I]) then
+      begin
+        FHIDDevice := FHID[I];
+        Break;
+      end;
+  Connected := Assigned(FHIDDevice);
+end;
+
+//------------------------------------------------------------------------------
+// SCHEDULE HID REFRESH
+//------------------------------------------------------------------------------
+procedure TfrmMain.ScheduleHIDRefresh;
+begin
+  if Assigned(FUSBUpdateTimer) then
+  begin
+    // Restart the timer so a burst of notifications causes only one refresh.
+    FUSBUpdateTimer.Enabled := False;
+    FUSBUpdateTimer.Enabled := True;
+  end;
+end;
+
+//------------------------------------------------------------------------------
+// HID REFRESH TIMER
+//------------------------------------------------------------------------------
+procedure TfrmMain.USBUpdateTimerTimer(Sender: TObject);
+begin
+  FUSBUpdateTimer.Enabled := False;
+  RefreshHIDConnection;
+end;
+
+//------------------------------------------------------------------------------
+// CONFIRM SAVE CHANGES
+//------------------------------------------------------------------------------
+function TfrmMain.ConfirmSaveChanges: Boolean;
+begin
+  Result := True;
+  if not MacroKeyboardConfig.Modified then Exit;
+
+  case Application.MessageBox(PChar(ConfirmSaveMessage), PChar(ApplicationTitle),
+    MB_ICONQUESTION + MB_YESNOCANCEL) of
+    ID_YES:
+      begin
+        if FileExists(MacroKeyboardConfig.FileName) then
+          MacroKeyboardConfig.SaveToFile(MacroKeyboardConfig.FileName)
+        else
+          acSaveAs.Execute;
+        Result := not MacroKeyboardConfig.Modified;
+      end;
+    ID_NO:
+      Result := True;
+  else
+    Result := False;
+  end;
+end;
+
+//------------------------------------------------------------------------------
+// PROGRAM CURRENT CONFIGURATION
+//------------------------------------------------------------------------------
+function TfrmMain.ProgramConfiguration: Boolean;
+var
+  ErrorMessage: string;
+begin
+  Result := False;
+  if not Connected or not Assigned(FHIDDevice) then Exit;
+  if not SupportsCurrentProgrammingLayout then
+  begin
+    Application.MessageBox(PChar(
+      'The active visual layout does not have a compatible HID protocol definition.'),
+      PChar(ApplicationTitle), MB_ICONWARNING + MB_OK);
+    Exit;
+  end;
+  if not Assigned(FProtocol) then
+  begin
+    Application.MessageBox(PChar('No protocol adapter is available for this device.'),
+      PChar(ApplicationTitle), MB_ICONERROR + MB_OK);
+    Exit;
+  end;
+  Result := FProtocol.ProgramDevice(CreateHIDTransport(FHIDDevice),
+    MacroKeyboardConfig, FDeviceDefinition, ErrorMessage);
+  if not Result then
+    Application.MessageBox(PChar(ErrorMessage), PChar(ApplicationTitle),
+      MB_ICONERROR + MB_OK);
+end;
+
+//------------------------------------------------------------------------------
+// CHECK PROGRAMMING LAYOUT SUPPORT
+//------------------------------------------------------------------------------
+function TfrmMain.SupportsCurrentProgrammingLayout: Boolean;
+var
+  I: Integer;
+begin
+  Result := Assigned(FDeviceDefinition) and Assigned(FProtocol) and
+    FDeviceDefinition.SupportsLayout(MacroKeyboard.Layout);
+  if not Result then Exit;
+  for I := 0 to FDeviceDefinition.ActionCount - 1 do
+    if (FDeviceDefinition[I].ProfileIndex < 0) or
+      (FDeviceDefinition[I].ProfileIndex >= MacroKeyboardConfig.Keys.Count) then
+      Exit(False);
+end;
+
+//------------------------------------------------------------------------------
+// LOAD DEVICE DEFINITION
+//------------------------------------------------------------------------------
+procedure TfrmMain.LoadDeviceDefinition(const FileName: string);
+var
+  Definition: TMacroKeyboardDeviceDefinition;
+  LayoutFileName: string;
+  Protocol: IMacroKeyboardProtocol;
+begin
+  Definition := TMacroKeyboardDeviceDefinition.Create;
+  try
+    Definition.LoadFromFile(FileName);
+    Protocol := CreateMacroKeyboardProtocol(Definition.ProtocolID);
+    if not Assigned(Protocol) then
+      raise EInvalidOperation.CreateFmt('Protocol "%s" is not implemented.',
+        [Definition.ProtocolID]);
+    LayoutFileName := Definition.ResolveLayoutFile;
+    MacroKeyboard.LoadLayoutFromFile(LayoutFileName);
+    FDeviceDefinition.Assign(Definition);
+    FProtocol := Protocol;
+    MacroKeyboard.SelectedIndex := -1;
+    Caption := Format('%s - %s', [ApplicationTitle, Definition.Name]);
+    RefreshHIDConnection;
+  finally
+    Definition.Free;
+  end;
+end;
+
+//------------------------------------------------------------------------------
+// GET SELECTED ACTION MAPPING
+//------------------------------------------------------------------------------
+function TfrmMain.SelectedAction(const Action: TMacroKeyboardActionKind):
+  TMacroKeyboardActionMapping;
+begin
+  Result := nil;
+  if not Assigned(FDeviceDefinition) or
+    (MacroKeyboard.SelectedIndex < 0) or
+    (MacroKeyboard.SelectedIndex >= MacroKeyboard.Layout.Count) then Exit;
+  Result := FDeviceDefinition.FindAction(
+    MacroKeyboard.ControlID(MacroKeyboard.SelectedIndex), Action);
+  if Assigned(Result) and ((Result.ProfileIndex < 0) or
+    (Result.ProfileIndex >= MacroKeyboardConfig.Keys.Count)) then
+    Result := nil;
+end;
+
+//------------------------------------------------------------------------------
+// PROGRAM ONE MAPPED ACTION
+//------------------------------------------------------------------------------
+function TfrmMain.ProgramMappedAction(
+  const Mapping: TMacroKeyboardActionMapping): Boolean;
+var
+  ErrorMessage: string;
+begin
+  Result := False;
+  if not Assigned(Mapping) or not Assigned(FProtocol) then Exit;
+  if not Connected or not Assigned(FHIDDevice) then
+  begin
+    Application.MessageBox(PChar(NotConnectedMessage), PChar(ApplicationTitle),
+      MB_ICONWARNING + MB_OK);
+    Exit;
+  end;
+  Result := FProtocol.ProgramAction(CreateHIDTransport(FHIDDevice),
+    MacroKeyboardConfig.Keys[Mapping.ProfileIndex], Mapping, ErrorMessage);
+  if not Result then
+    Application.MessageBox(PChar(ErrorMessage), PChar(ApplicationTitle),
+      MB_ICONERROR + MB_OK);
+end;
+
+//------------------------------------------------------------------------------
+// CLEAR ONE MAPPED ACTION
+//------------------------------------------------------------------------------
+function TfrmMain.ClearMappedAction(
+  const Mapping: TMacroKeyboardActionMapping): Boolean;
+var
+  ErrorMessage: string;
+begin
+  Result := False;
+  if not Assigned(Mapping) or not Assigned(FProtocol) then Exit;
+  if not Connected or not Assigned(FHIDDevice) then
+  begin
+    Application.MessageBox(PChar(NotConnectedMessage), PChar(ApplicationTitle),
+      MB_ICONWARNING + MB_OK);
+    Exit;
+  end;
+  Result := FProtocol.ClearAction(CreateHIDTransport(FHIDDevice), Mapping,
+    ErrorMessage);
+  if not Result then
+    Application.MessageBox(PChar(ErrorMessage), PChar(ApplicationTitle),
+      MB_ICONERROR + MB_OK);
+end;
+
+//------------------------------------------------------------------------------
 // ON USB ARRIVAL
 //------------------------------------------------------------------------------
 procedure TfrmMain.OnUSBArrival(Sender: TObject);
 begin
-  if not Connected then
-  TTask.Run(
-    procedure
-    begin
-      // Wait for windows to update the device list
-      Sleep(USBUpdateDelay);
-      // Try to find the macro keyboard
-      FHIDDevice := FHID.FindDevice(ProductString, InterfaceNumber);
-      // Update connected flag
-      Connected := FHIDDevice <> nil;
-    end
-  );
+  ScheduleHIDRefresh;
 end;
 
 //------------------------------------------------------------------------------
@@ -266,18 +499,10 @@ end;
 //------------------------------------------------------------------------------
 procedure TfrmMain.OnUSBRemoval(Sender: TObject);
 begin
-  if Connected then
-  TTask.Run(
-    procedure
-    begin
-      // Wait for windows to update the device list
-      Sleep(USBUpdateDelay);
-      // Try to find the macro keyboard
-      FHIDDevice := FHID.FindDevice(ProductString, InterfaceNumber);
-      // Update connected flag
-      Connected := FHIDDevice <> nil;
-    end
-  );
+  // Prevent new writes through a device that Windows has just removed.
+  FHIDDevice := nil;
+  Connected := False;
+  ScheduleHIDRefresh;
 end;
 
 //------------------------------------------------------------------------------
@@ -350,6 +575,7 @@ procedure TfrmMain.LoadSettings;
 
 var
   Reg: TRegistry;
+  LastOpenedConfig: string;
   X, Y, W, H, S: Integer;
 begin
   Reg := TRegistry.Create;
@@ -403,8 +629,20 @@ begin
       // Load last opened config
       if FLoadLastOpenedConfigOnStart then
       begin
-        // Open the configuration from the file
-        if Reg.ValueExists('LastOpenedConfig') then MacroKeyboardConfig.LoadFromFile(Reg.ReadString('LastOpenedConfig'));
+        if Reg.ValueExists('LastOpenedConfig') then
+        begin
+          LastOpenedConfig := Reg.ReadString('LastOpenedConfig');
+          if FileExists(LastOpenedConfig) then
+          try
+            MacroKeyboardConfig.LoadFromFile(LastOpenedConfig);
+          except
+            on E: Exception do
+              Application.MessageBox(PChar(Format(
+                'The last configuration could not be loaded:%s%s',
+                [sLineBreak, E.Message])), PChar(ApplicationTitle),
+                MB_ICONWARNING + MB_OK);
+          end;
+        end;
       end;
     end else
     begin
@@ -474,8 +712,12 @@ end;
 procedure TfrmMain.MacroKeyboardSelect(Sender: TObject; Index: Integer);
 begin
   // Enable/Disable menu items
-  Key1.Enabled := (Index >= 0) and (Index <= 11);
-  Knob1.Enabled := (Index >= 12) and (Index <= 14);
+  Key1.Enabled := SupportsCurrentProgrammingLayout and
+    Assigned(SelectedAction(makPress));
+  Knob1.Enabled := SupportsCurrentProgrammingLayout and
+    (Assigned(SelectedAction(makClockwise)) or
+     Assigned(SelectedAction(makCounterClockwise)) or
+     Assigned(SelectedAction(makEncoderClick)));
 end;
 
 //------------------------------------------------------------------------------
@@ -496,16 +738,24 @@ procedure TfrmMain.FormCreate(Sender: TObject);
 begin
   // Load settings
   LoadSettings;
+  // Create the built-in definition and protocol before discovering devices.
+  FDeviceDefinition := TMacroKeyboardDeviceDefinition.Create;
+  FDeviceDefinition.CreateDefaultCH552;
+  FDeviceDefinition.Validate;
+  FProtocol := CreateMacroKeyboardProtocol(FDeviceDefinition.ProtocolID);
   // Create HID device list
   FHID := THIDDeviceList.Create;
+  // Create the main-thread debounce timer for device notifications.
+  FUSBUpdateTimer := TTimer.Create(Self);
+  FUSBUpdateTimer.Enabled := False;
+  FUSBUpdateTimer.Interval := USBUpdateDelay;
+  FUSBUpdateTimer.OnTimer := USBUpdateTimerTimer;
   // Assign on arrival event handler
   FHID.OnUSBArrival := OnUSBArrival;
   // Assign on removal event handler
   FHID.OnUSBRemoval := OnUSBRemoval;
-  // Try to find the macro keyboard
-  FHIDDevice := FHID.FindDevice(ProductString, InterfaceNumber);
-  // Update connected flag
-  Connected := FHIDDevice <> nil;
+  // Find the macro keyboard and update the connection state.
+  RefreshHIDConnection;
   // Set Caption
   Caption := ApplicationTitle;
   // Set Title
@@ -521,8 +771,19 @@ end;
 //------------------------------------------------------------------------------
 procedure TfrmMain.FormDestroy(Sender: TObject);
 begin
+  Application.OnMinimize := nil;
+  if Assigned(FUSBUpdateTimer) then
+    FUSBUpdateTimer.Enabled := False;
+  if Assigned(FHID) then
+  begin
+    FHID.OnUSBArrival := nil;
+    FHID.OnUSBRemoval := nil;
+  end;
+  FHIDDevice := nil;
+  FProtocol := nil;
   // Destroy HID device list
-  FHID.Destroy;
+  FreeAndNil(FHID);
+  FreeAndNil(FDeviceDefinition);
 end;
 
 //------------------------------------------------------------------------------
@@ -549,31 +810,7 @@ end;
 //------------------------------------------------------------------------------
 procedure TfrmMain.acNewExecute(Sender: TObject);
 begin
-  if MacroKeyboardConfig.Modified then
-  begin
-    case Application.MessageBox(PChar(ConfirmSaveMessage), PChar(ApplicationTitle), MB_ICONQUESTION + MB_YESNOCANCEL) of
-      ID_YES:
-      begin
-        // if the file exists, save it
-        if FileExists(MacroKeyboardConfig.FileName) then
-          MacroKeyboardConfig.SaveToFile(MacroKeyboardConfig.FileName)
-        else
-          // Otherwise execute the save as dialog
-          if not acSaveAs.Execute then Exit;
-      end;
-
-      ID_NO:
-      begin
-        // No need to save changes, do nothing here
-      end;
-
-      ID_CANCEL:
-      begin
-        // Exit here, dont create a new configuration
-        Exit;
-      end;
-    end;
-  end;
+  if not ConfirmSaveChanges then Exit;
 
   // New configuration
   MacroKeyboardConfig.New;
@@ -582,79 +819,54 @@ begin
 end;
 
 //------------------------------------------------------------------------------
-// BEFORE OPEN
+// OPEN ACCEPT
 //------------------------------------------------------------------------------
-procedure TfrmMain.acOpenBeforeExecute(Sender: TObject);
+procedure TfrmMain.acOpenAccept(Sender: TObject);
 begin
-  if MacroKeyboardConfig.Modified then
-  case Application.MessageBox(PChar(ConfirmSaveMessage), PChar(ApplicationTitle), MB_ICONQUESTION + MB_YESNOCANCEL) of
-    ID_YES:
-    begin
-      // if the file exists, save it
-      if FileExists(MacroKeyboardConfig.FileName) then
-        MacroKeyboardConfig.SaveToFile(MacroKeyboardConfig.FileName)
-      else
-        // Otherwise execute the save as dialog
-        if not acSaveAs.Execute then Exit;
-    end;
+  if not ConfirmSaveChanges then Exit;
 
-    ID_NO:
-    begin
-      // No need to save changes, do nothing here
-    end;
+  // Open the configuration from the file
+  MacroKeyboardConfig.LoadFromFile(acOpen.Dialog.FileName);
 
-    ID_CANCEL:
-    begin
-      // Exit here, dont create a new configuration
-      Exit;
-    end;
+  if FSetMacroKeysOnOpenConfig then
+  begin
+    if Connected then
+      ProgramConfiguration
+    else
+      Application.MessageBox(PChar(NotConnectedMessage), PChar(ApplicationTitle),
+        MB_ICONWARNING + MB_OK);
   end;
 end;
 
 //------------------------------------------------------------------------------
-// OPEN ACCEPT
+// OPEN VISUAL LAYOUT
 //------------------------------------------------------------------------------
-procedure TfrmMain.acOpenAccept(Sender: TObject);
-var
-  I: Integer;
-  Macro: THIDMacro;
+procedure TfrmMain.acOpenLayoutAccept(Sender: TObject);
 begin
-  // Open the configuration from the file
-  MacroKeyboardConfig.LoadFromFile(acOpen.Dialog.FileName);
+  MacroKeyboard.LoadLayoutFromFile(acOpenLayout.Dialog.FileName);
+  MacroKeyboard.SelectedIndex := -1;
+  Caption := Format('%s - %s', [ApplicationTitle, MacroKeyboard.Layout.Name]);
+  if not SupportsCurrentProgrammingLayout then
+    Application.MessageBox(PChar(
+      'This layout can be previewed and navigated, but it has no compatible HID protocol definition yet. Device programming is disabled.'),
+      PChar(ApplicationTitle), MB_ICONINFORMATION + MB_OK);
+end;
 
-  if FSetMacroKeysOnOpenConfig and Connected then
-  begin
-    if FHIDDevice.Open then
-    begin
-      // Assign Key Macros
-      for I := 0 to 11 do
-      begin
-        Macro := MacroKeyboardConfig.Keys[MacroKeyboard.SelectedIndex].ToHIDMacro(I + 1);
-        if not FHIDDevice.Write(Macro) then showmessage(SysErrorMessage(GetLastError));
-      end;
+//------------------------------------------------------------------------------
+// OPEN DEVICE DEFINITION
+//------------------------------------------------------------------------------
+procedure TfrmMain.acOpenDeviceDefinitionAccept(Sender: TObject);
+begin
+  LoadDeviceDefinition(acOpenDeviceDefinition.Dialog.FileName);
+end;
 
-      // Assign Knob Macros
-      for I := 12 to 20 do
-      begin
-        // Knob 1
-        if I = 12 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT1_RIGHT);
-        if I = 13 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT1_LEFT);
-        if I = 14 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT1_CLICK);
-        // Knob 2
-        if I = 15 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT2_RIGHT);
-        if I = 16 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT2_LEFT);
-        if I = 17 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT2_CLICK);
-        // Knob 3
-        if I = 18 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT3_RIGHT);
-        if I = 19 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT3_LEFT);
-        if I = 20 then Macro := MacroKeyboardConfig.Keys[I].ToHIDMacro(KEYBOARD_ROT3_CLICK);
-      end;
-
-      // Close device
-      FHIDDevice.Close;
-    end;
-  end else
-    Application.MessageBox(PChar(NotConnectedMessage), PChar(ApplicationTitle), MB_ICONWARNING + MB_OK);
+//------------------------------------------------------------------------------
+// EXPORT SANITIZED DIAGNOSTICS
+//------------------------------------------------------------------------------
+procedure TfrmMain.acExportDiagnosticsAccept(Sender: TObject);
+begin
+  TMacroKeyboardDiagnostics.SaveToFile(acExportDiagnostics.Dialog.FileName,
+    FHID, FDeviceDefinition, False);
 end;
 
 //------------------------------------------------------------------------------
@@ -691,34 +903,9 @@ end;
 //------------------------------------------------------------------------------
 procedure TfrmMain.FormCloseQuery(Sender: TObject; var CanClose: Boolean);
 begin
-  if MacroKeyboardConfig.Modified then
-  case Application.MessageBox(PChar(ConfirmSaveMessage), PChar(ApplicationTitle), MB_ICONQUESTION + MB_YESNOCANCEL) of
-    ID_YES:
-    begin
-      // if the file exists, save it
-      if FileExists(MacroKeyboardConfig.FileName) then
-        MacroKeyboardConfig.SaveToFile(MacroKeyboardConfig.FileName)
-      else
-        // Otherwise execute the save as dialog
-        if not acSaveAs.Execute then Exit;
-    end;
-
-    ID_NO:
-    begin
-      // No need to save changes, do nothing here
-    end;
-
-    ID_CANCEL:
-    begin
-      // Dont close the form
-      CanClose := False;
-    end;
-  end;
-
-  // Save the settings
-  SaveSettings;
-  // If we make it until here we can close the form.
-  CanClose := True;
+  CanClose := ConfirmSaveChanges;
+  if CanClose then
+    SaveSettings;
 end;
 
 //------------------------------------------------------------------------------
@@ -759,23 +946,16 @@ end;
 //------------------------------------------------------------------------------
 procedure TfrmMain.acSetMacroKeyExecute(Sender: TObject);
 var
-  Macro: THIDMacro;
+  Mapping: TMacroKeyboardActionMapping;
 begin
-  if (MacroKeyboard.SelectedIndex >= 0) and (MacroKeyboard.SelectedIndex <= 11) and (frmKeyMacro.Execute(MacroKeyboard.SelectedIndex, MacroKeyboardConfig.Keys[MacroKeyboard.SelectedIndex]) = MROK) then
+  Mapping := SelectedAction(makPress);
+  if Assigned(Mapping) and
+    (frmKeyMacro.Execute(MacroKeyboard.SelectedIndex,
+      MacroKeyboardConfig.Keys[Mapping.ProfileIndex]) = MROK) then
   begin
     // Update the macro key
-    frmKeyMacro.UpdateMacroKey(MacroKeyboardConfig.Keys[MacroKeyboard.SelectedIndex]);
-    // Update the macro keyboard with the new macro key
-    if Connected then
-    begin
-      if FHIDDevice.Open then
-      begin
-        Macro := MacroKeyboardConfig.Keys[MacroKeyboard.SelectedIndex].ToHIDMacro(MacroKeyboard.SelectedIndex + 1);
-        if not FHIDDevice.Write(Macro) then showmessage(SysErrorMessage(GetLastError));
-        FHIDDevice.Close;
-      end;
-    end else
-      Application.MessageBox(PChar(NotConnectedMessage), PChar(ApplicationTitle), MB_ICONWARNING + MB_OK);
+    frmKeyMacro.UpdateMacroKey(MacroKeyboardConfig.Keys[Mapping.ProfileIndex]);
+    ProgramMappedAction(Mapping);
   end;
 end;
 
@@ -784,34 +964,15 @@ end;
 //------------------------------------------------------------------------------
 procedure TfrmMain.acSetMacroKnobCExecute(Sender: TObject);
 var
-  Index: Integer;
-  Macro: THIDMacro;
+  Mapping: TMacroKeyboardActionMapping;
 begin
-  Index := -1;
-  if MacroKeyboard.SelectedIndex = 12 then Index := 12;
-  if MacroKeyboard.SelectedIndex = 13 then Index := 15;
-  if MacroKeyboard.SelectedIndex = 14 then Index := 18;
-  if (Index >= 12) and (MacroKeyboard.SelectedIndex >= 12) and (MacroKeyboard.SelectedIndex <= 14) and (frmKnobMacro.Execute(MacroKeyboard.SelectedIndex, MacroKeyboardConfig.Keys[Index], 'Clockwise') = MROK) then
+  Mapping := SelectedAction(makClockwise);
+  if Assigned(Mapping) and
+    (frmKnobMacro.Execute(MacroKeyboard.SelectedIndex,
+      MacroKeyboardConfig.Keys[Mapping.ProfileIndex], 'Clockwise') = MROK) then
   begin
-    // Update the macro key
-    frmKnobMacro.UpdateMacroKey(MacroKeyboardConfig.Keys[Index]);
-    // Update the macro keyboard with the new macro key
-    if Connected then
-    begin
-      if FHIDDevice.Open then
-      begin
-        // Knob 1
-        if MacroKeyboard.SelectedIndex = 12 then Macro := MacroKeyboardConfig.Keys[Index].ToHIDMacro(KEYBOARD_ROT1_RIGHT);
-        // Knob 2
-        if MacroKeyboard.SelectedIndex = 13 then Macro := MacroKeyboardConfig.Keys[Index].ToHIDMacro(KEYBOARD_ROT2_RIGHT);
-        // Knob 3
-        if MacroKeyboard.SelectedIndex = 14 then Macro := MacroKeyboardConfig.Keys[Index].ToHIDMacro(KEYBOARD_ROT3_RIGHT);
-
-        if not FHIDDevice.Write(Macro) then Application.MessageBox(PChar(Format(FailedSetMacroMessage, [GetLastError, SysErrorMessage(GetLastError)])), PChar(ApplicationTitle), MB_ICONERROR + MB_OK);
-        FHIDDevice.Close;
-      end;
-    end else
-      Application.MessageBox(PChar(NotConnectedMessage), PChar(ApplicationTitle), MB_ICONWARNING + MB_OK);
+    frmKnobMacro.UpdateMacroKey(MacroKeyboardConfig.Keys[Mapping.ProfileIndex]);
+    ProgramMappedAction(Mapping);
   end;
 end;
 
@@ -820,34 +981,15 @@ end;
 //------------------------------------------------------------------------------
 procedure TfrmMain.acSetMacroKnobCCExecute(Sender: TObject);
 var
-  Index: Integer;
-  Macro: THIDMacro;
+  Mapping: TMacroKeyboardActionMapping;
 begin
-  Index := -1;
-  if MacroKeyboard.SelectedIndex = 12 then Index := 13;
-  if MacroKeyboard.SelectedIndex = 13 then Index := 16;
-  if MacroKeyboard.SelectedIndex = 14 then Index := 19;
-  if (Index >= 13) and (MacroKeyboard.SelectedIndex >= 12) and (MacroKeyboard.SelectedIndex <= 14) and (frmKnobMacro.Execute(MacroKeyboard.SelectedIndex, MacroKeyboardConfig.Keys[Index], 'Counter Clockwise') = MROK) then
+  Mapping := SelectedAction(makCounterClockwise);
+  if Assigned(Mapping) and
+    (frmKnobMacro.Execute(MacroKeyboard.SelectedIndex,
+      MacroKeyboardConfig.Keys[Mapping.ProfileIndex], 'Counter Clockwise') = MROK) then
   begin
-    // Update the macro key
-    frmKnobMacro.UpdateMacroKey(MacroKeyboardConfig.Keys[Index]);
-    // Update the macro keyboard with the new macro key
-    if Connected then
-    begin
-      if FHIDDevice.Open then
-      begin
-        // Knob 1
-        if MacroKeyboard.SelectedIndex = 12 then Macro := MacroKeyboardConfig.Keys[Index].ToHIDMacro(KEYBOARD_ROT1_LEFT);
-        // Knob 2
-        if MacroKeyboard.SelectedIndex = 13 then Macro := MacroKeyboardConfig.Keys[Index].ToHIDMacro(KEYBOARD_ROT2_LEFT);
-        // Knob 3
-        if MacroKeyboard.SelectedIndex = 14 then Macro := MacroKeyboardConfig.Keys[Index].ToHIDMacro(KEYBOARD_ROT3_LEFT);
-
-        if not FHIDDevice.Write(Macro) then Application.MessageBox(PChar(Format(FailedSetMacroMessage, [GetLastError, SysErrorMessage(GetLastError)])), PChar(ApplicationTitle), MB_ICONERROR + MB_OK);
-        FHIDDevice.Close;
-      end;
-    end else
-      Application.MessageBox(PChar(NotConnectedMessage), PChar(ApplicationTitle), MB_ICONWARNING + MB_OK);
+    frmKnobMacro.UpdateMacroKey(MacroKeyboardConfig.Keys[Mapping.ProfileIndex]);
+    ProgramMappedAction(Mapping);
   end;
 end;
 
@@ -856,34 +998,15 @@ end;
 //------------------------------------------------------------------------------
 procedure TfrmMain.acSetMacroKnobExecute(Sender: TObject);
 var
-  Index: Integer;
-  Macro: THIDMacro;
+  Mapping: TMacroKeyboardActionMapping;
 begin
-  Index := -1;
-  if MacroKeyboard.SelectedIndex = 12 then Index := 14;
-  if MacroKeyboard.SelectedIndex = 13 then Index := 17;
-  if MacroKeyboard.SelectedIndex = 14 then Index := 20;
-  if (Index >= 14) and (MacroKeyboard.SelectedIndex >= 12) and (MacroKeyboard.SelectedIndex <= 14) and (frmKnobMacro.Execute(MacroKeyboard.SelectedIndex, MacroKeyboardConfig.Keys[Index], 'Click') = MROK) then
+  Mapping := SelectedAction(makEncoderClick);
+  if Assigned(Mapping) and
+    (frmKnobMacro.Execute(MacroKeyboard.SelectedIndex,
+      MacroKeyboardConfig.Keys[Mapping.ProfileIndex], 'Click') = MROK) then
   begin
-    // Update the macro key
-    frmKnobMacro.UpdateMacroKey(MacroKeyboardConfig.Keys[Index]);
-    // Update the macro keyboard with the new macro key
-    if Connected then
-    begin
-      if FHIDDevice.Open then
-      begin
-        // Knob 1
-        if MacroKeyboard.SelectedIndex = 12 then Macro := MacroKeyboardConfig.Keys[Index].ToHIDMacro(KEYBOARD_ROT1_CLICK);
-        // Knob 2
-        if MacroKeyboard.SelectedIndex = 13 then Macro := MacroKeyboardConfig.Keys[Index].ToHIDMacro(KEYBOARD_ROT2_CLICK);
-        // Knob 3
-        if MacroKeyboard.SelectedIndex = 14 then Macro := MacroKeyboardConfig.Keys[Index].ToHIDMacro(KEYBOARD_ROT3_CLICK);
-
-        if not FHIDDevice.Write(Macro) then Application.MessageBox(PChar(Format(FailedSetMacroMessage, [GetLastError, SysErrorMessage(GetLastError)])), PChar(ApplicationTitle), MB_ICONERROR + MB_OK);
-        FHIDDevice.Close;
-      end;
-    end else
-      Application.MessageBox(PChar(NotConnectedMessage), PChar(ApplicationTitle), MB_ICONWARNING + MB_OK);
+    frmKnobMacro.UpdateMacroKey(MacroKeyboardConfig.Keys[Mapping.ProfileIndex]);
+    ProgramMappedAction(Mapping);
   end;
 end;
 
@@ -892,32 +1015,25 @@ end;
 //------------------------------------------------------------------------------
 procedure TfrmMain.MacroKeyboardKeyKnobHint(Sender: TObject; Index: Integer; var Hint: string);
 var
-  HintText: string;
+  Mapping: TMacroKeyboardActionMapping;
+
+  procedure AppendActionName(const Action: TMacroKeyboardActionKind);
+  begin
+    Mapping := FDeviceDefinition.FindAction(MacroKeyboard.ControlID(Index), Action);
+    if Assigned(Mapping) and (Mapping.ProfileIndex < MacroKeyboardConfig.Keys.Count) then
+    begin
+      if Hint <> '' then Hint := Hint + ' - ';
+      Hint := Hint + MacroKeyboardConfig.Keys[Mapping.ProfileIndex].Name;
+    end;
+  end;
 begin
-  if (Index >= 0) and (Index <= 11) then
-  begin
-    // Key Hint
-    Hint := MacroKeyboardConfig.Keys[Index].Name;
-  end;
-  if (Index >= 12) and (Index <= 14) then
-  begin
-    // Knob  1
-    if (Index = 12) then
-    begin
-      HintText := MacroKeyboardConfig.Keys[12].Name + ' - ' + MacroKeyboardConfig.Keys[13].Name + ' - ' + MacroKeyboardConfig.Keys[14].Name;
-    end;
-    // Knob 2
-    if (Index = 13) then
-    begin
-      HintText := MacroKeyboardConfig.Keys[15].Name + ' - ' + MacroKeyboardConfig.Keys[16].Name + ' - ' + MacroKeyboardConfig.Keys[17].Name;
-    end;
-    // Knob 3
-    if (Index = 14) then
-    begin
-      HintText := MacroKeyboardConfig.Keys[18].Name + ' - ' + MacroKeyboardConfig.Keys[19].Name + ' - ' + MacroKeyboardConfig.Keys[20].Name;
-    end;
-    Hint := HintText;
-  end;
+  Hint := '';
+  if not Assigned(FDeviceDefinition) or (Index < 0) or
+    (Index >= MacroKeyboard.Layout.Count) then Exit;
+  AppendActionName(makPress);
+  AppendActionName(makClockwise);
+  AppendActionName(makCounterClockwise);
+  AppendActionName(makEncoderClick);
 end;
 
 //------------------------------------------------------------------------------
@@ -958,28 +1074,21 @@ end;
 procedure TfrmMain.MacroKeyboardKeyPress(Sender: TObject; Index: Integer;
   Key: Word; Shift: TShiftState);
 begin
-  // Key
-  if (Index >= 0) and (Index <= 11) then
+  if Assigned(SelectedAction(makPress)) then
   begin
-    // Enter/Return - Set Macro
     if (Key = VK_RETURN) then acSetMacroKey.Execute;
-    // Delete - Clear Macro
     if (Key = VK_DELETE) then acClearKey.Execute;
   end;
-  // Knob
-  if (Index >= 12) and (Index <= 14) then
+  if Assigned(SelectedAction(makClockwise)) or
+    Assigned(SelectedAction(makCounterClockwise)) or
+    Assigned(SelectedAction(makEncoderClick)) then
   begin
-    // Enter/Return - Set Macro
     if (Key = VK_RETURN) then
     begin
-      // Clockwise
       if Shift = [ssCtrl] then acSetMacroKnobC.Execute;
-      // Counter clockwise
       if Shift = [ssAlt] then acSetMacroKnobCC.Execute;
-      // Click
       if Shift = [] then acSetMacroKnob.Execute;
     end;
-    // Delete - Clear Macro
     if (Key = VK_DELETE) then acClearKnob.Execute;
   end;
 end;
@@ -988,17 +1097,11 @@ end;
 // CLEAR KEY MACRO
 //------------------------------------------------------------------------------
 procedure TfrmMain.acClearKeyExecute(Sender: TObject);
+var
+  Mapping: TMacroKeyboardActionMapping;
 begin
-  if Connected then
-  begin
-    if FHIDDevice.Open then
-    begin
-      if not FHIDDevice.Write(CreateClearKeyMacro(MacroKeyboard.SelectedIndex + 1)) then
-        Application.MessageBox(PChar(Format(FailedSetMacroMessage, [GetLastError, SysErrorMessage(GetLastError)])), PChar(ApplicationTitle), MB_ICONERROR + MB_OK);
-      FHIDDevice.Close;
-    end;
-  end else
-    Application.MessageBox(PChar(NotConnectedMessage), PChar(ApplicationTitle), MB_ICONWARNING + MB_OK);
+  Mapping := SelectedAction(makPress);
+  if Assigned(Mapping) then ClearMappedAction(Mapping);
 end;
 
 //------------------------------------------------------------------------------
@@ -1006,43 +1109,15 @@ end;
 //------------------------------------------------------------------------------
 procedure TfrmMain.acClearKnobExecute(Sender: TObject);
 begin
-  if Connected then
+  if not Connected then
   begin
-    if FHIDDevice.Open then
-    begin
-      case MacroKeyboard.SelectedIndex of
-        // Knob 1
-        12: begin
-          if not FHIDDevice.Write(CreateClearKeyMacro(KEYBOARD_ROT1_LEFT)) then
-            Application.MessageBox(PChar(Format(FailedSetMacroMessage, [GetLastError, SysErrorMessage(GetLastError)])), PChar(ApplicationTitle), MB_ICONERROR + MB_OK);
-          if not FHIDDevice.Write(CreateClearKeyMacro(KEYBOARD_ROT1_CLICK)) then
-            Application.MessageBox(PChar(Format(FailedSetMacroMessage, [GetLastError, SysErrorMessage(GetLastError)])), PChar(ApplicationTitle), MB_ICONERROR + MB_OK);
-          if not FHIDDevice.Write(CreateClearKeyMacro(KEYBOARD_ROT1_RIGHT)) then
-            Application.MessageBox(PChar(Format(FailedSetMacroMessage, [GetLastError, SysErrorMessage(GetLastError)])), PChar(ApplicationTitle), MB_ICONERROR + MB_OK);
-        end;
-        // Knob 2
-        13: begin
-          if not FHIDDevice.Write(CreateClearKeyMacro(KEYBOARD_ROT2_LEFT)) then
-            Application.MessageBox(PChar(Format(FailedSetMacroMessage, [GetLastError, SysErrorMessage(GetLastError)])), PChar(ApplicationTitle), MB_ICONERROR + MB_OK);
-          if not FHIDDevice.Write(CreateClearKeyMacro(KEYBOARD_ROT2_CLICK)) then
-            Application.MessageBox(PChar(Format(FailedSetMacroMessage, [GetLastError, SysErrorMessage(GetLastError)])), PChar(ApplicationTitle), MB_ICONERROR + MB_OK);
-          if not FHIDDevice.Write(CreateClearKeyMacro(KEYBOARD_ROT2_RIGHT)) then
-            Application.MessageBox(PChar(Format(FailedSetMacroMessage, [GetLastError, SysErrorMessage(GetLastError)])), PChar(ApplicationTitle), MB_ICONERROR + MB_OK);
-        end;
-        // Knob 3
-        14: begin
-          if not FHIDDevice.Write(CreateClearKeyMacro(KEYBOARD_ROT3_LEFT)) then
-            Application.MessageBox(PChar(Format(FailedSetMacroMessage, [GetLastError, SysErrorMessage(GetLastError)])), PChar(ApplicationTitle), MB_ICONERROR + MB_OK);
-          if not FHIDDevice.Write(CreateClearKeyMacro(KEYBOARD_ROT3_CLICK)) then
-            Application.MessageBox(PChar(Format(FailedSetMacroMessage, [GetLastError, SysErrorMessage(GetLastError)])), PChar(ApplicationTitle), MB_ICONERROR + MB_OK);
-          if not FHIDDevice.Write(CreateClearKeyMacro(KEYBOARD_ROT3_RIGHT)) then
-            Application.MessageBox(PChar(Format(FailedSetMacroMessage, [GetLastError, SysErrorMessage(GetLastError)])), PChar(ApplicationTitle), MB_ICONERROR + MB_OK);
-        end;
-      end;
-      FHIDDevice.Close;
-    end;
-  end else
-    Application.MessageBox(PChar(NotConnectedMessage), PChar(ApplicationTitle), MB_ICONWARNING + MB_OK);
+    Application.MessageBox(PChar(NotConnectedMessage), PChar(ApplicationTitle),
+      MB_ICONWARNING + MB_OK);
+    Exit;
+  end;
+  ClearMappedAction(SelectedAction(makClockwise));
+  ClearMappedAction(SelectedAction(makCounterClockwise));
+  ClearMappedAction(SelectedAction(makEncoderClick));
 end;
 
 end.

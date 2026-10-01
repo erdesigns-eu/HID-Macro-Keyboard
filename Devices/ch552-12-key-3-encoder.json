@@ -1,0 +1,141 @@
+{
+  "schemaVersion": 1,
+  "id": "ch552-12-key-3-encoder",
+  "name": "CH552 12-key / 3-encoder macro keyboard",
+  "protocol": "ch552-v1",
+  "layout": "../Layouts/12-key-3-encoder.json",
+  "match": {
+    "vendorId": 0,
+    "productId": 0,
+    "productString": "CH552",
+    "interfaceNumber": 1
+  },
+  "actions": [
+    {
+      "profileIndex": 0,
+      "controlId": "key-1",
+      "action": "press",
+      "command": 1
+    },
+    {
+      "profileIndex": 1,
+      "controlId": "key-2",
+      "action": "press",
+      "command": 2
+    },
+    {
+      "profileIndex": 2,
+      "controlId": "key-3",
+      "action": "press",
+      "command": 3
+    },
+    {
+      "profileIndex": 3,
+      "controlId": "key-4",
+      "action": "press",
+      "command": 4
+    },
+    {
+      "profileIndex": 4,
+      "controlId": "key-5",
+      "action": "press",
+      "command": 5
+    },
+    {
+      "profileIndex": 5,
+      "controlId": "key-6",
+      "action": "press",
+      "command": 6
+    },
+    {
+      "profileIndex": 6,
+      "controlId": "key-7",
+      "action": "press",
+      "command": 7
+    },
+    {
+      "profileIndex": 7,
+      "controlId": "key-8",
+      "action": "press",
+      "command": 8
+    },
+    {
+      "profileIndex": 8,
+      "controlId": "key-9",
+      "action": "press",
+      "command": 9
+    },
+    {
+      "profileIndex": 9,
+      "controlId": "key-10",
+      "action": "press",
+      "command": 10
+    },
+    {
+      "profileIndex": 10,
+      "controlId": "key-11",
+      "action": "press",
+      "command": 11
+    },
+    {
+      "profileIndex": 11,
+      "controlId": "key-12",
+      "action": "press",
+      "command": 12
+    },
+    {
+      "profileIndex": 12,
+      "controlId": "encoder-1",
+      "action": "clockwise",
+      "command": 161
+    },
+    {
+      "profileIndex": 13,
+      "controlId": "encoder-1",
+      "action": "counterClockwise",
+      "command": 163
+    },
+    {
+      "profileIndex": 14,
+      "controlId": "encoder-1",
+      "action": "encoderClick",
+      "command": 162
+    },
+    {
+      "profileIndex": 15,
+      "controlId": "encoder-2",
+      "action": "clockwise",
+      "command": 164
+    },
+    {
+      "profileIndex": 16,
+      "controlId": "encoder-2",
+      "action": "counterClockwise",
+      "command": 166
+    },
+    {
+      "profileIndex": 17,
+      "controlId": "encoder-2",
+      "action": "encoderClick",
+      "command": 165
+    },
+    {
+      "profileIndex": 18,
+      "controlId": "encoder-3",
+      "action": "clockwise",
+      "command": 167
+    },
+    {
+      "profileIndex": 19,
+      "controlId": "encoder-3",
+      "action": "counterClockwise",
+      "command": 169
+    },
+    {
+      "profileIndex": 20,
+      "controlId": "encoder-3",
+      "action": "encoderClick",
+      "command": 168
+    }
+  ]
+}

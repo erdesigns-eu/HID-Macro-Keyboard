@@ -120,6 +120,12 @@
         <DCCReference Include="Units\HID.pas"/>
         <DCCReference Include="Units\HID.MacroKeyboard.pas"/>
         <DCCReference Include="Units\HID.MacroKeyboard.Component.pas"/>
+        <DCCReference Include="Units\HID.MacroKeyboard.Layout.pas"/>
+        <DCCReference Include="Units\HID.MacroKeyboard.DeviceDefinition.pas"/>
+        <DCCReference Include="Units\HID.MacroKeyboard.DeviceCatalog.pas"/>
+        <DCCReference Include="Units\HID.MacroKeyboard.Protocol.pas"/>
+        <DCCReference Include="Units\HID.MacroKeyboard.Transport.pas"/>
+        <DCCReference Include="Units\HID.MacroKeyboard.Diagnostics.pas"/>
         <DCCReference Include="Units\HID.MacroKeyboard.Config.pas"/>
         <DCCReference Include="Units\untKeyMacro.pas">
             <Form>frmKeyMacro</Form>
