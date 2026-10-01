@@ -14,7 +14,7 @@ interface
 
 uses
   WinApi.Windows, System.SysUtils, System.Classes, WinApi.Messages, Vcl.Forms,
-  HID.Types, HID.Constants, dialogs;
+  System.Generics.Collections, HID.Types, HID.Constants;
 
 type
   THIDMacro = array of Byte;
@@ -120,12 +120,28 @@ type
     ///   Interface number of the HID device.
     /// </summary>
     FInterfaceNumber: Integer;
+    /// <summary>
+    ///   USB vendor identifier parsed from the device path.
+    /// </summary>
+    FVendorID: Word;
+    /// <summary>
+    ///   USB product identifier parsed from the device path.
+    /// </summary>
+    FProductID: Word;
   private
     /// <summary>
     ///   HID Device Handle.
     /// </summary>
     FDeviceHandle: THandle;
   public
+    /// <summary>
+    ///   Creates a HID device with no open operating-system handle.
+    /// </summary>
+    constructor Create;
+    /// <summary>
+    ///   Closes the device handle and destroys the HID device.
+    /// </summary>
+    destructor Destroy; override;
     /// <summary>
     ///   Opens the HID device.
     /// </summary>
@@ -235,6 +251,14 @@ type
     ///   Interface number of the HID device.
     /// </summary>
     property InterfaceNumber: Integer read FInterfaceNumber write FInterfaceNumber;
+    /// <summary>
+    ///   USB vendor identifier parsed from the device path.
+    /// </summary>
+    property VendorID: Word read FVendorID write FVendorID;
+    /// <summary>
+    ///   USB product identifier parsed from the device path.
+    /// </summary>
+    property ProductID: Word read FProductID write FProductID;
   end;
 
 type
@@ -248,6 +272,10 @@ type
     ///   listen to usb device insert/removal events.
     /// </summary>
     FUSBHandle: HWND;
+    /// <summary>
+    ///   Handle returned by RegisterDeviceNotification.
+    /// </summary>
+    FUSBNotificationHandle: HDEVNOTIFY;
     /// <summary>
     ///   Event when new USB devices is added
     /// </summary>
@@ -269,7 +297,7 @@ type
     /// <summary>
     ///   List containing the HID devices.
     /// </summary>
-    FDevices: TList;
+    FDevices: TObjectList<THIDDevice>;
     /// <summary>
     ///   Retrieves a device property as a string.
     /// </summary>
@@ -368,12 +396,33 @@ function HidP_GetCaps(PreparsedData: PHIDP_PREPARSED_DATA; var Capabilities: HID
 implementation
 
 //------------------------------------------------------------------------------
+// CONSTRUCTOR
+//------------------------------------------------------------------------------
+constructor THIDDevice.Create;
+begin
+  inherited Create;
+  FDeviceHandle := INVALID_HANDLE_VALUE;
+end;
+
+//------------------------------------------------------------------------------
+// DESTRUCTOR
+//------------------------------------------------------------------------------
+destructor THIDDevice.Destroy;
+begin
+  Close;
+  inherited Destroy;
+end;
+
+//------------------------------------------------------------------------------
 // OPEN HID DEVICE
 //------------------------------------------------------------------------------
 function THIDDevice.Open: Boolean;
 begin
+  // Always close a previous session before opening a new one.
+  Close;
   // Open a handle to the HID device
-  FDeviceHandle := CreateFile(PChar(FDevicePath), GENERIC_WRITE, FILE_SHARE_WRITE, nil, OPEN_EXISTING, 0, 0);
+  FDeviceHandle := CreateFile(PChar(FDevicePath), GENERIC_WRITE,
+    FILE_SHARE_READ or FILE_SHARE_WRITE, nil, OPEN_EXISTING, 0, 0);
   // Check if the handle is valid
   Result := FDeviceHandle <> INVALID_HANDLE_VALUE;
 end;
@@ -383,8 +432,12 @@ end;
 //------------------------------------------------------------------------------
 procedure THIDDevice.Close;
 begin
-  // Close the handle to the HID device
-  CloseHandle(FDeviceHandle);
+  if FDeviceHandle <> INVALID_HANDLE_VALUE then
+  begin
+    // Close the handle to the HID device
+    CloseHandle(FDeviceHandle);
+    FDeviceHandle := INVALID_HANDLE_VALUE;
+  end;
 end;
 
 //------------------------------------------------------------------------------
@@ -394,8 +447,25 @@ function THIDDevice.Write(const Macro: THIDMacro): Boolean;
 var
   BytesWritten: Cardinal;
 begin
+  BytesWritten := 0;
+  if FDeviceHandle = INVALID_HANDLE_VALUE then
+  begin
+    SetLastError(ERROR_INVALID_HANDLE);
+    Exit(False);
+  end;
+  if Length(Macro) = 0 then
+  begin
+    SetLastError(ERROR_INVALID_DATA);
+    Exit(False);
+  end;
+
   // Write data to the HID device
   Result := WriteFile(FDeviceHandle, Macro[0], Length(Macro), BytesWritten, nil);
+  if Result and (BytesWritten <> Cardinal(Length(Macro))) then
+  begin
+    SetLastError(ERROR_WRITE_FAULT);
+    Result := False;
+  end;
 end;
 
 //------------------------------------------------------------------------------
@@ -409,7 +479,7 @@ begin
   // Call inherited constructor
   inherited Create;
   // Create the list for storing the HID devices
-  FDevices := TList.Create;
+  FDevices := TObjectList<THIDDevice>.Create(True);
   // Create the hidden window for USB arrival/removal
   FUSBHandle := AllocateHWnd(USBWndProc);
   // Register the USB listener
@@ -420,18 +490,25 @@ begin
   DBI.dbcc_reserved := 0;
   DBI.dbcc_classguid  := GUID_DEVINTERFACE_USB_DEVICE;
   DBI.dbcc_name := 0;
-  RegisterDeviceNotification(FUSBHandle, @DBI, DEVICE_NOTIFY_WINDOW_HANDLE);
+  FUSBNotificationHandle := RegisterDeviceNotification(FUSBHandle, @DBI,
+    DEVICE_NOTIFY_WINDOW_HANDLE);
 end;
 
 //------------------------------------------------------------------------------
 // DESTRUCTOR
 //------------------------------------------------------------------------------
 destructor THIDDeviceList.Destroy;
-var
-  I: Integer;
 begin
-  // Free all the HID devices
-  for I := 0 to FDevices.Count - 1 do THIDDevice(FDevices[I]).Free;
+  if FUSBNotificationHandle <> nil then
+  begin
+    UnregisterDeviceNotification(FUSBNotificationHandle);
+    FUSBNotificationHandle := nil;
+  end;
+  if FUSBHandle <> 0 then
+  begin
+    DeallocateHWnd(FUSBHandle);
+    FUSBHandle := 0;
+  end;
   // Free the HID device list
   FDevices.Free;
   // Call inherited destructor
@@ -455,6 +532,7 @@ begin
       begin
         // Get Data
         Data := PDEV_BROADCAST_HDR(Msg.lParam);
+        if not Assigned(Data) then Exit;
         // Get device type
         DeviceType := Data^.dbch_devicetype;
         // Make sure we are handling events for the right device type (USB) only
@@ -551,6 +629,18 @@ end;
 //------------------------------------------------------------------------------
 procedure THIDDeviceList.AddDevice(DeviceInfoSet: HDEVINFO; DeviceInterfaceData: SP_DEVICE_INTERFACE_DATA);
 
+  function GetHexIdentifier(const DevicePath: string; const Marker: string): Word;
+  var
+    MarkerPosition: Integer;
+    ValueText: string;
+  begin
+    Result := 0;
+    MarkerPosition := Pos(LowerCase(Marker), LowerCase(DevicePath));
+    if MarkerPosition = 0 then Exit;
+    ValueText := Copy(DevicePath, MarkerPosition + Length(Marker), 4);
+    Result := StrToIntDef('$' + ValueText, 0);
+  end;
+
   function GetInterfaceNumber(DevicePath: string): DWORD;
   var
     InterfaceNumberStr: string;
@@ -573,7 +663,7 @@ procedure THIDDeviceList.AddDevice(DeviceInfoSet: HDEVINFO; DeviceInterfaceData:
         Inc(MiPos, VidPos);
         // Extract the interface number
         InterfaceNumberStr := Copy(DevicePath, MiPos + 3, 2);
-        Result := StrToIntDef(InterfaceNumberStr, 1);
+        Result := StrToIntDef('$' + InterfaceNumberStr, 1);
       end;
     end;
   end;
@@ -605,67 +695,61 @@ begin
     begin
       // Create a new HID device instance.
       HIDDevice := THIDDevice.Create;
+      try
+        // Store the device path in the HID device instance.
+        HIDDevice.DevicePath := WideCharToString(@DeviceInterfaceDetailData.DevicePath);
 
-      // Store the device path in the HID device instance.
-      HIDDevice.DevicePath := WideCharToString(@DeviceInterfaceDetailData.DevicePath);
-
-      // Open a handle to the HID device.
-      DeviceHandle := CreateFile(PChar(HIDDevice.DevicePath), GENERIC_READ or GENERIC_WRITE, FILE_SHARE_READ or FILE_SHARE_WRITE, nil, OPEN_EXISTING, 0, 0);
-      if DeviceHandle <> INVALID_HANDLE_VALUE then
-      begin
-        // Retrieve and store the manufacturer string.
-        HIDDevice.ManufacturerString := GetHIDString(DeviceHandle, 1);
-        // Retrieve and store the product string.
-        HIDDevice.ProductString := GetHIDString(DeviceHandle, 2);
-        // Retrieve and store the serial number string.
-        HIDDevice.SerialNumberString := GetHIDString(DeviceHandle, 3);
-
-        // Retrieve and store the HID capabilities.
-        if GetHIDCapabilities(DeviceHandle, HIDCaps) then
+        // Open a handle to the HID device.
+        DeviceHandle := CreateFile(PChar(HIDDevice.DevicePath), GENERIC_READ or
+          GENERIC_WRITE, FILE_SHARE_READ or FILE_SHARE_WRITE, nil,
+          OPEN_EXISTING, 0, 0);
+        if DeviceHandle <> INVALID_HANDLE_VALUE then
         begin
-          HIDDevice.NumberInputButtons := HIDCaps.NumberInputButtonCaps;
-          HIDDevice.NumberOutputButtons := HIDCaps.NumberOutputButtonCaps;
-          HIDDevice.NumberFeatureButtons := HIDCaps.NumberFeatureButtonCaps;
-          HIDDevice.NumberInputAxes := HIDCaps.NumberInputValueCaps;
-          HIDDevice.NumberOutputAxes := HIDCaps.NumberOutputValueCaps;
-          HIDDevice.NumberFeatureAxes := HIDCaps.NumberFeatureValueCaps;
+          try
+            // Retrieve and store the HID strings.
+            HIDDevice.ManufacturerString := GetHIDString(DeviceHandle, 1);
+            HIDDevice.ProductString := GetHIDString(DeviceHandle, 2);
+            HIDDevice.SerialNumberString := GetHIDString(DeviceHandle, 3);
+
+            // Retrieve and store the HID capabilities.
+            if GetHIDCapabilities(DeviceHandle, HIDCaps) then
+            begin
+              HIDDevice.NumberInputButtons := HIDCaps.NumberInputButtonCaps;
+              HIDDevice.NumberOutputButtons := HIDCaps.NumberOutputButtonCaps;
+              HIDDevice.NumberFeatureButtons := HIDCaps.NumberFeatureButtonCaps;
+              HIDDevice.NumberInputAxes := HIDCaps.NumberInputValueCaps;
+              HIDDevice.NumberOutputAxes := HIDCaps.NumberOutputValueCaps;
+              HIDDevice.NumberFeatureAxes := HIDCaps.NumberFeatureValueCaps;
+            end;
+          finally
+            CloseHandle(DeviceHandle);
+          end;
         end;
 
-        // Close the handle to the HID device.
-        CloseHandle(DeviceHandle);
+        // Retrieve and store the SetupAPI properties.
+        HIDDevice.Description := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_DEVICEDESC);
+        HIDDevice.Manufacturer := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_MFG);
+        HIDDevice.FriendlyName := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_FRIENDLYNAME);
+        HIDDevice.Location := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_LOCATION_INFORMATION);
+        HIDDevice.HardwareID := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_HARDWAREID);
+        HIDDevice.CompatibleIDs := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_COMPATIBLEIDS);
+        HIDDevice.Service := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_SERVICE);
+        HIDDevice.DeviceClass := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_CLASS);
+        HIDDevice.ClassGUID := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_CLASSGUID);
+        HIDDevice.Driver := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_DRIVER);
+        HIDDevice.PhysicalDeviceObjectName := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_PHYSICAL_DEVICE_OBJECT_NAME);
+        HIDDevice.Capabilities := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_CAPABILITIES);
+        HIDDevice.UIDNumber := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_UINUMBER);
+        HIDDevice.InterfaceNumber := GetInterfaceNumber(HIDDevice.DevicePath);
+        HIDDevice.VendorID := GetHexIdentifier(HIDDevice.DevicePath, 'vid_');
+        HIDDevice.ProductID := GetHexIdentifier(HIDDevice.DevicePath, 'pid_');
+
+        // Ownership transfers to the list only after initialization succeeds.
+        FDevices.Add(HIDDevice);
+        HIDDevice := nil;
+      finally
+        HIDDevice.Free;
       end;
-
-      // Retrieve and store the device description.
-      HIDDevice.Description := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_DEVICEDESC);
-      // Retrieve and store the manufacturer name.
-      HIDDevice.Manufacturer := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_MFG);
-      // Retrieve and store the friendly name.
-      HIDDevice.FriendlyName := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_FRIENDLYNAME);
-      // Retrieve and store the location information.
-      HIDDevice.Location := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_LOCATION_INFORMATION);
-      // Retrieve and store the hardware ID.
-      HIDDevice.HardwareID := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_HARDWAREID);
-      // Retrieve and store the compatible IDs.
-      HIDDevice.CompatibleIDs := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_COMPATIBLEIDS);
-      // Retrieve and store the service name.
-      HIDDevice.Service := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_SERVICE);
-      // Retrieve and store the device class.
-      HIDDevice.DeviceClass := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_CLASS);
-      // Retrieve and store the class GUID.
-      HIDDevice.ClassGUID := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_CLASSGUID);
-      // Retrieve and store the driver key.
-      HIDDevice.Driver := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_DRIVER);
-      // Retrieve and store the physical device object name.
-      HIDDevice.PhysicalDeviceObjectName := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_PHYSICAL_DEVICE_OBJECT_NAME);
-      // Retrieve and store the capabilities.
-      HIDDevice.Capabilities := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_CAPABILITIES);
-      // Retrieve and store the UI number.
-      HIDDevice.UIDNumber := GetDevicePropertyW(DeviceInfoSet, @DeviceInfoData, SPDRP_UINUMBER);
-      // Extract the interface number from the device path
-      HIDDevice.InterfaceNumber := GetInterfaceNumber(HIDDevice.DevicePath);
-
-      // Add the HID device to the device list.
-      FDevices.Add(HIDDevice);
     end;
   finally
     // Free the allocated memory for the device interface detail data structure.
@@ -683,7 +767,7 @@ begin
   // Exit here if the index is out of range
   if (Index < 0) or (Index > FDevices.Count -1) then Exit;
   // Return the device from the list of devices
-  Result := FDevices.Items[Index];
+  Result := FDevices[Index];
 end;
 
 //------------------------------------------------------------------------------
@@ -706,7 +790,7 @@ begin
   DeviceInfoSet := SetupDiGetClassDevsW(@GUID_DEVINTERFACE_HID, nil, 0, DIGCF_PRESENT or DIGCF_DEVICEINTERFACE);
 
   // Check if the handle to the device information set is valid.
-  if DeviceInfoSet = nil then Exit;
+  if DeviceInfoSet = INVALID_HANDLE_VALUE then Exit;
 
   try
     MemberIndex := 0;

@@ -1,0 +1,119 @@
+{
+  "schemaVersion": 1,
+  "name": "9 keys + 3 encoders",
+  "device": {
+    "width": 106,
+    "height": 80,
+    "borderRadius": 7
+  },
+  "controls": [
+    {
+      "id": "key-1",
+      "label": "1",
+      "type": "key",
+      "x": 8,
+      "y": 8,
+      "width": 18,
+      "height": 18
+    },
+    {
+      "id": "key-2",
+      "label": "2",
+      "type": "key",
+      "x": 30,
+      "y": 8,
+      "width": 18,
+      "height": 18
+    },
+    {
+      "id": "key-3",
+      "label": "3",
+      "type": "key",
+      "x": 52,
+      "y": 8,
+      "width": 18,
+      "height": 18
+    },
+    {
+      "id": "key-4",
+      "label": "4",
+      "type": "key",
+      "x": 8,
+      "y": 30,
+      "width": 18,
+      "height": 18
+    },
+    {
+      "id": "key-5",
+      "label": "5",
+      "type": "key",
+      "x": 30,
+      "y": 30,
+      "width": 18,
+      "height": 18
+    },
+    {
+      "id": "key-6",
+      "label": "6",
+      "type": "key",
+      "x": 52,
+      "y": 30,
+      "width": 18,
+      "height": 18
+    },
+    {
+      "id": "key-7",
+      "label": "7",
+      "type": "key",
+      "x": 8,
+      "y": 52,
+      "width": 18,
+      "height": 18
+    },
+    {
+      "id": "key-8",
+      "label": "8",
+      "type": "key",
+      "x": 30,
+      "y": 52,
+      "width": 18,
+      "height": 18
+    },
+    {
+      "id": "key-9",
+      "label": "9",
+      "type": "key",
+      "x": 52,
+      "y": 52,
+      "width": 18,
+      "height": 18
+    },
+    {
+      "id": "encoder-1",
+      "label": "1",
+      "type": "encoder",
+      "x": 78,
+      "y": 7,
+      "width": 20,
+      "height": 20
+    },
+    {
+      "id": "encoder-2",
+      "label": "2",
+      "type": "encoder",
+      "x": 78,
+      "y": 30,
+      "width": 20,
+      "height": 20
+    },
+    {
+      "id": "encoder-3",
+      "label": "3",
+      "type": "encoder",
+      "x": 78,
+      "y": 53,
+      "width": 20,
+      "height": 20
+    }
+  ]
+}
