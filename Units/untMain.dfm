@@ -62,8 +62,14 @@ object frmMain: TfrmMain
       Dialog.DefaultExt = '*.mkc'
       Dialog.Filter = 'Macro Keyboard Config|*.mkc'
       ShortCut = 16463
-      BeforeExecute = acOpenBeforeExecute
       OnAccept = acOpenAccept
+    end
+    object acOpenLayout: TFileOpen
+      Category = 'View'
+      Caption = 'Load &Layout...'
+      Dialog.DefaultExt = '*.json'
+      Dialog.Filter = 'Macro Keyboard Layout|*.json|JSON files|*.json'
+      OnAccept = acOpenLayoutAccept
     end
     object acSave: TAction
       Category = 'File'
@@ -206,6 +212,12 @@ object frmMain: TfrmMain
     end
     object View1: TMenuItem
       Caption = 'View'
+      object LoadLayout1: TMenuItem
+        Action = acOpenLayout
+      end
+      object N12: TMenuItem
+        Caption = '-'
+      end
       object ZoomIn1: TMenuItem
         Action = acZoomIn
       end

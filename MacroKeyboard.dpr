@@ -8,6 +8,7 @@ uses
   HID in 'Units\HID.pas',
   HID.MacroKeyboard in 'Units\HID.MacroKeyboard.pas',
   HID.MacroKeyboard.Component in 'Units\HID.MacroKeyboard.Component.pas',
+  HID.MacroKeyboard.Layout in 'Units\HID.MacroKeyboard.Layout.pas',
   Vcl.Themes,
   Vcl.Styles,
   HID.MacroKeyboard.Config in 'Units\HID.MacroKeyboard.Config.pas',
